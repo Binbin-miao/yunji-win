@@ -4,9 +4,11 @@ __pycache__/
 *$py.class
 *.so
 .Python
+# PyInstaller 产物（含带后缀的临时输出目录，如 dist_v2 / build_v3）
 build/
-develop-eggs/
+build_*/
 dist/
+dist_*/
 dist_new/
 dist_old/
 downloads/
