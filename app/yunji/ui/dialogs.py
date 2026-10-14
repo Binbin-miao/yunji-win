@@ -262,10 +262,11 @@ class ConfirmDialog(QDialog):
 class ImportExportDialog(QDialog):
     """导入/导出 JSON 编辑框（剪贴板方式，对照 Android 剪贴板导入导出）"""
 
-    def __init__(self, parent, title: str, text: str = "", edit_mode: bool = False):
+    def __init__(self, parent, title: str, text: str = "", edit_mode: bool = False,
+                 hint: str = ""):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.resize(560, 380)
+        self.resize(560, 420)
         lay = QVBoxLayout(self)
         self.edit = QLineEdit()
         if edit_mode:
@@ -290,10 +291,19 @@ class ImportExportDialog(QDialog):
             btns.addWidget(close_btn)
             lay.addLayout(btns)
         else:
-            lay.addWidget(QLabel("粘贴 JSON 文本后点击导入"))
+            if hint:
+                hint_lab = QLabel(hint)
+                hint_lab.setWordWrap(True)
+                hint_lab.setStyleSheet(
+                    "color:#555; font-size:11px; background:#f5f5f5;"
+                    "padding:8px; border-radius:4px;")
+                lay.addWidget(hint_lab)
+            else:
+                lay.addWidget(QLabel("粘贴 JSON 文本后点击导入"))
             self.text = QTextBrowser()
-            self.text.setPlaceholderText("{ ... }")
+            self.text.setPlaceholderText("在此粘贴 EQ 文本或 JSON ...")
             lay.addWidget(self.text, 1)
+
             self.err = QLabel("")
             self.err.setStyleSheet("color:#c62828;")
             lay.addWidget(self.err)
@@ -333,8 +343,8 @@ class ImportExportDialog(QDialog):
         d.exec()
 
     @staticmethod
-    def ask_import(parent) -> Optional[str]:
-        d = ImportExportDialog(parent, "导入 EQ", "", edit_mode=False)
+    def ask_import(parent, hint: str = "") -> Optional[str]:
+        d = ImportExportDialog(parent, "导入 EQ", "", edit_mode=False, hint=hint)
         if d.exec() == QDialog.Accepted:
             return d.result_text
         return None

@@ -6,9 +6,13 @@
 - 若 %APPDATA%\\YunjiSettings\\assets-override 下存在同名文件，则优先使用（可选，高级用法）。
 """
 import json
+import logging
 import os
 import sys
+import threading
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 APP_DIR_NAME = "YunjiSettings"
 OVERRIDE_DIR_NAME = "assets-override"
@@ -46,32 +50,43 @@ def resolve_asset(rel: str) -> Path:
 
 
 class JsonStore:
-    """简单 JSON 文件存储"""
+    """简单 JSON 文件存储（线程安全）"""
 
     def __init__(self, path: Path, default):
         self.path = Path(path)
         self.default = default
         self._data = None
+        self._lock = threading.RLock()
 
     @property
     def data(self):
-        if self._data is None:
-            try:
-                with open(self.path, "r", encoding="utf-8") as f:
-                    self._data = json.load(f)
-            except Exception:
-                self._data = json.loads(json.dumps(self.default))
-        return self._data
+        with self._lock:
+            if self._data is None:
+                try:
+                    with open(self.path, "r", encoding="utf-8") as f:
+                        self._data = json.load(f)
+                except Exception:
+                    self._data = json.loads(json.dumps(self.default))
+            return self._data
 
     def save(self):
-        tmp = self.path.with_suffix(self.path.suffix + ".tmp")
-        with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, ensure_ascii=False, indent=2)
-        os.replace(tmp, self.path)
+        with self._lock:
+            tmp = self.path.with_suffix(self.path.suffix + ".tmp")
+            try:
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(self._data, f, ensure_ascii=False, indent=2)
+                os.replace(tmp, self.path)
+            except Exception:
+                logging.getLogger(__name__).exception("写入失败: %s", self.path)
+                raise
 
 
 class AppState:
-    """全局状态：设备列表 / 非官方声明确认 / 每设备设置"""
+    """全局状态：设备列表 / 非官方声明确认 / 每设备设置
+
+    注意：设备扫描在后台线程执行，会调用 list_known_devices()，
+    因此本类实例需通过 get_app_state() 复用，避免重复建目录与读盘。
+    """
 
     def __init__(self):
         d = app_data_dir()
@@ -111,3 +126,16 @@ class AppState:
     def set_device_settings(self, name: str, pid, values: dict):
         self.device_settings.data[self.settings_key(name, pid)] = values
         self.device_settings.save()
+
+
+_state: "AppState | None" = None
+_state_lock = threading.Lock()
+
+
+def get_app_state() -> AppState:
+    """进程内单例：设备扫描线程与主线程共用，避免重复读盘"""
+    global _state
+    with _state_lock:
+        if _state is None:
+            _state = AppState()
+        return _state
