@@ -33,6 +33,7 @@ ENV/
 # PyInstaller
 *.manifest
 *.spec
+!YunjiSettings.spec
 
 # IDE & OS
 .idea/
