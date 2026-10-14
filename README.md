@@ -1,6 +1,10 @@
-# yunji-win
+# 云姬电脑版 · yunji-win
 
-> **YunjiSettings Windows Port** —— 面向 Windows 桌面端的音频小尾巴/耳放参数调节与硬件 EQ 配置工具。
+> **云姬 Windows 版（非官方开源移植）** —— 让云姬小尾巴 / Type-C 解码耳放在电脑上也能自由调音：8 段参数均衡器、DAC 硬件音量、麦克风增益、声道平衡、数字滤波器切换。
+
+**关键词**：云姬电脑版 · 云姬 Windows 版 · 云姬 PC 版 · 云姬电脑端下载 · 小尾巴调音软件 · 解码耳放 EQ 工具 · TTGK · 旋润 · USB DAC 调音
+
+🌐 **官网落地页**：<https://binbin-miao.github.io/yunji-win/> ｜ ⬇ **下载**：[Releases](https://github.com/Binbin-miao/yunji-win/releases/latest)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-brightgreen.svg)]()
@@ -10,7 +14,7 @@
 
 ## 📖 项目简介
 
-本项目为独立开发的第三方 Windows 桌面端移植版本（移植参考自官方 Android 端 v1.7.5 架构与通信协议）。
+本项目为独立开发的第三方 Windows 桌面端移植版本（移植参考自官方 Android 端 v1.7.5 架构与通信协议），即社区常说的「**云姬电脑版**」。
 
 由于市面上多数便携式解码耳放（小尾巴）仅提供了移动端 App，Windows 用户在连接电脑使用时往往无法便捷地调节 DAC 滤波模式、耳放增益档位、麦克风输入电平，更无法调用设备内置的硬件 DSP 进行专业 Parametric EQ / Easy EQ 调音。
 
@@ -107,6 +111,28 @@ pyinstaller --noconfirm --windowed \
 ## 📚 技术文档
 
 - [硬件通信与 DSP 协议规范](docs/协议参考.md)：包含 TTGK 64 字节 HID 报文定义、旋润 7 字节控制传输协议、8 段 Biquad EQ 定点系数计算公式。
+
+---
+
+## ❓ 常见问题 (FAQ)
+
+**Q：云姬电脑版是官方软件吗？**
+不是。本项目是独立开发者出于学习与跨平台便利性所做的**非官方开源移植**，与任何音频硬件品牌官方均无商业合作、赞助或授权关系，相关商标归原权利人所有。
+
+**Q：云姬电脑版要装驱动吗？**
+TTGK 阵营设备使用 Windows 原生 HID 驱动，**无需额外安装任何驱动**，插上即用；旋润阵营设备基于 USB 控制传输，若未识别可参考本文档上方的驱动说明。
+
+**Q：云姬电脑版支持哪些设备？**
+目前支持 TTGK 阵营（凌云剑、Q25 等，CB1200 / CB5100 架构）与旋润阵营（YUNJI43198PRO、YUNJI43198ULTRA、You Got Me 等）。若你的设备未在列表内，欢迎在 [Issues](https://github.com/Binbin-miao/yunji-win/issues) 提交设备信息协助适配。
+
+**Q：会不会刷坏我的设备固件？**
+不会。软件只会按你的操作读写设备的可配置参数（音量、EQ、滤波档位等），不会刷写固件；所有写入操作都需要你主动点击保存。
+
+**Q：云姬电脑版和手机 App 的调音效果一致吗？**
+一致。本项目复刻了设备端的 8 段双二阶滤波器计算方式（固定 96 kHz 基准采样率、Q30 定点量化），并已在真机上完成读写与提交验证，参数与手机端表现相同。
+
+**Q：可以在 Linux / macOS 上用吗？**
+协议层与 UI 均为 Python 实现，理论上可移植，但目前仅在 Windows 10 / 11 上完成测试与打包。欢迎社区提交跨平台适配 PR。
 
 ---
 

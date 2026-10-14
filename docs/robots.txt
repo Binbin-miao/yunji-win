@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# 云姬电脑版（YunjiSettings Windows Port）站点地图
+Sitemap: https://binbin-miao.github.io/yunji-win/sitemap.xml

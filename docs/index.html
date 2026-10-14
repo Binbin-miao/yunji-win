@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>云姬电脑版下载 | 云姬 Windows 版（非官方开源移植）— Type-C 解码耳放 EQ 调音工具</title>
+<meta name="description" content="云姬电脑版（云姬 Windows 版）下载：非官方开源移植工具，让云姬小尾巴 / 解码耳放在电脑上也能调音。支持 TTGK、旋润双品牌协议，内置 8 段参数均衡器 ProEQ、简易均衡器 EZEQ、DAC 硬件音量、麦克风增益、声道平衡、5 档数字滤波器切换；TTGK 设备免驱即插即用。">
+<meta name="keywords" content="云姬电脑版,云姬Windows版,云姬PC版,云姬电脑端,云姬下载,云姬设置电脑版,小尾巴调音软件,解码耳放调音,USB DAC EQ 软件,参数均衡器,TTGK,旋润,YunjiSettings,yunji-win">
+<meta name="author" content="宾宾">
+<meta name="robots" content="index,follow">
+<link rel="canonical" href="https://binbin-miao.github.io/yunji-win/">
+
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="云姬电脑版 · YunjiSettings Windows Port">
+<meta property="og:title" content="云姬电脑版下载 | 云姬 Windows 版（非官方开源移植）">
+<meta property="og:description" content="让云姬小尾巴 / 解码耳放在 Windows 电脑上也能调音：8 段参数均衡器、DAC 音量、麦克风增益、声道平衡、滤波器切换。TTGK 免驱即插即用，MIT 开源。">
+<meta property="og:url" content="https://binbin-miao.github.io/yunji-win/">
+<meta property="og:image" content="https://raw.githubusercontent.com/Binbin-miao/yunji-win/main/screenshots/04_ttgk_main.png">
+<meta name="twitter:card" content="summary_large_image">
+
+<link rel="icon" href="https://raw.githubusercontent.com/Binbin-miao/yunji-win/main/app/assets/icons/ic_launcher.png">
+
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "云姬电脑版 (YunjiSettings Windows Port)",
+  "alternateName": ["云姬 Windows 版", "云姬 PC 版", "YunjiSettings"],
+  "operatingSystem": "Windows 10, Windows 11",
+  "applicationCategory": "MultimediaApplication",
+  "applicationSubCategory": "音频设备配置工具",
+  "softwareVersion": "1.7.5",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "inLanguage": "zh-CN",
+  "description": "云姬电脑版是非官方的开源 Windows 移植工具，用于在电脑上调节 Type-C 音频解码耳放（小尾巴）的硬件参数与 EQ：8 段参数均衡器 ProEQ、简易均衡器 EZEQ、DAC 音量、麦克风增益、声道平衡、数字滤波器、LED 与增益档位。支持 TTGK 与旋润双品牌协议。",
+  "downloadUrl": "https://github.com/Binbin-miao/yunji-win/releases/latest",
+  "codeRepository": "https://github.com/Binbin-miao/yunji-win",
+  "url": "https://binbin-miao.github.io/yunji-win/",
+  "author": {"@type": "Person", "name": "宾宾"},
+  "offers": {"@type": "Offer", "price": "0", "priceCurrency": "CNY"}
+}
+</script>
+
+<style>
+  :root{
+    --bg:#0f172a; --bg2:#111c33; --card:#182338; --line:#243352;
+    --fg:#e8eefc; --muted:#93a4c4; --accent:#38bdf8; --accent2:#a78bfa;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{
+    margin:0; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei","PingFang SC","Hiragino Sans GB",sans-serif;
+    line-height:1.75; -webkit-font-smoothing:antialiased;
+  }
+  a{color:var(--accent); text-decoration:none}
+  a:hover{text-decoration:underline}
+  .wrap{max-width:960px; margin:0 auto; padding:0 20px}
+  header{
+    padding:64px 0 48px; text-align:center;
+    background:radial-gradient(120% 100% at 50% 0%, #1b2a4a 0%, var(--bg) 60%);
+    border-bottom:1px solid var(--line);
+  }
+  .logo{width:96px; height:96px; border-radius:22px; box-shadow:0 8px 30px rgba(56,189,248,.25)}
+  h1{font-size:2rem; margin:22px 0 8px; letter-spacing:.5px}
+  .sub{color:var(--muted); font-size:1.05rem; margin:0 auto; max-width:640px}
+  .badges{margin:18px 0 0; font-size:.85rem; color:var(--muted)}
+  .badges span{display:inline-block; margin:4px 5px; padding:3px 10px; border:1px solid var(--line); border-radius:999px}
+  .btns{margin:30px 0 0; display:flex; gap:14px; justify-content:center; flex-wrap:wrap}
+  .btn{
+    display:inline-block; padding:13px 26px; border-radius:10px; font-weight:600; font-size:.98rem;
+    background:linear-gradient(135deg,var(--accent),var(--accent2)); color:#08111f; text-decoration:none;
+    box-shadow:0 6px 20px rgba(56,189,248,.28);
+  }
+  .btn:hover{text-decoration:none; filter:brightness(1.08)}
+  .btn.ghost{background:transparent; color:var(--fg); border:1px solid var(--line); box-shadow:none}
+  main{padding:56px 0 40px}
+  h2{font-size:1.35rem; margin:44px 0 14px; padding-left:12px; border-left:4px solid var(--accent)}
+  h3{font-size:1.05rem; margin:22px 0 6px; color:var(--fg)}
+  p,li{color:#cbd6ec}
+  .grid{display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; margin-top:18px}
+  .card{background:var(--card); border:1px solid var(--line); border-radius:14px; padding:20px 22px}
+  .card h3{margin-top:0}
+  .card p{font-size:.92rem; color:var(--muted); margin:6px 0 0}
+  ol,ul{padding-left:22px}
+  code{background:#0b1425; border:1px solid var(--line); border-radius:5px; padding:2px 6px; font-size:.88em; color:#8ee7ff}
+  pre{background:#0b1425; border:1px solid var(--line); border-radius:10px; padding:14px 16px; overflow:auto}
+  pre code{border:0; background:none; padding:0}
+  .shot{width:100%; border-radius:12px; border:1px solid var(--line); margin-top:16px}
+  .note{background:#1a2236; border:1px solid var(--line); border-left:4px solid #f6ad55; border-radius:10px; padding:16px 20px; font-size:.9rem; color:#c9d4e8}
+  footer{border-top:1px solid var(--line); padding:32px 0 48px; text-align:center; color:var(--muted); font-size:.86rem}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <img class="logo" src="https://raw.githubusercontent.com/Binbin-miao/yunji-win/main/app/assets/icons/ic_launcher.png" alt="云姬电脑版 图标">
+    <h1>云姬电脑版 · Windows 端</h1>
+    <p class="sub">让 <strong>云姬小尾巴 / Type-C 解码耳放</strong>在电脑上也能自由调音 —— 8 段参数均衡器、DAC 硬件音量、麦克风增益、声道平衡、数字滤波器切换，一次配齐。</p>
+    <div class="badges">
+      <span>Windows 10 / 11</span>
+      <span>免安装绿色版</span>
+      <span>TTGK 免驱直通</span>
+      <span>MIT 开源</span>
+      <span>v1.7.5</span>
+    </div>
+    <div class="btns">
+      <a class="btn" href="https://github.com/Binbin-miao/yunji-win/releases/latest">⬇ 下载云姬电脑版</a>
+      <a class="btn ghost" href="https://github.com/Binbin-miao/yunji-win">查看源码 (GitHub)</a>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <h2>什么是云姬电脑版？</h2>
+  <p>
+    <strong>云姬电脑版</strong>（也叫<strong>云姬 Windows 版</strong>、<strong>云姬 PC 版</strong>）是一个<strong>非官方的开源桌面移植工具</strong>。
+    官方云姬 App 只提供安卓手机端，Windows 用户在电脑上连接 Type-C 解码耳放（俗称「小尾巴」）时，往往无法调节设备内置的 DSP 参数。
+    本项目基于对设备通信协议的逆向分析与自研实现，把手机上的调音能力完整搬到了 Windows 桌面端。
+  </p>
+  <p>
+    它支持 <strong>TTGK</strong> 与 <strong>旋润</strong> 两大品牌阵营的硬件协议，可直接读写设备固件参数并保存，全部操作在本机完成，不依赖任何厂商服务器。
+  </p>
+
+  <h2>核心功能</h2>
+  <div class="grid">
+    <div class="card">
+      <h3>🎚️ 参数均衡器 ProEQ</h3>
+      <p>8 段双二阶（Biquad）峰值均衡，实时频响曲线拟合，可逐段调整频率、Q 值与增益，一键写入硬件 DSP 并生效。</p>
+    </div>
+    <div class="card">
+      <h3>🎛️ 简易均衡器 EZEQ</h3>
+      <p>音乐 / 游戏双模式，8 个特征旋钮配合随机调音模板，不懂参数也能快速调出满意的听感。</p>
+    </div>
+    <div class="card">
+      <h3>🔊 DAC 与硬件参数</h3>
+      <p>硬件音量、麦克风输入增益、左右声道平衡、高 / 低增益档位、5 档数字滤波器、LED 指示灯开关。</p>
+    </div>
+    <div class="card">
+      <h3>🔌 免驱即插即用</h3>
+      <p>TTGK 阵营利用 Windows 原生 HID 驱动直通，无需安装 WinUSB 或任何第三方驱动，插上就能识别。</p>
+    </div>
+    <div class="card">
+      <h3>🔄 热插拔自动侦测</h3>
+      <p>设备拔出自动回列表，重新插入自动识别并同步当前硬件参数状态，无需重启软件。</p>
+    </div>
+    <div class="card">
+      <h3>🧩 开源可扩展</h3>
+      <p>MIT 许可证开源，协议实现完全公开，欢迎提交新设备适配与功能 PR。</p>
+    </div>
+  </div>
+
+  <h2>支持设备</h2>
+  <ul>
+    <li><strong>TTGK 阵营</strong>：凌云剑、Q25 等（CB1200 / CB5100 架构）—— USB HID 中断传输，Windows 原生免驱。</li>
+    <li><strong>旋润阵营</strong>：YUNJI43198PRO、YUNJI43198ULTRA、You Got Me 等 —— USB 控制传输。</li>
+  </ul>
+  <p>若你的设备不在列表内，欢迎在 <a href="https://github.com/Binbin-miao/yunji-win/issues">Issues</a> 提交设备信息协助适配。</p>
+
+  <h2>界面预览</h2>
+  <img class="shot" src="https://raw.githubusercontent.com/Binbin-miao/yunji-win/main/screenshots/04_ttgk_main.png" alt="云姬电脑版 TTGK 设备参数调节界面">
+  <img class="shot" src="https://raw.githubusercontent.com/Binbin-miao/yunji-win/main/screenshots/05_proeq.png" alt="云姬电脑版 8 段参数均衡器 ProEQ 界面">
+  <img class="shot" src="https://raw.githubusercontent.com/Binbin-miao/yunji-win/main/screenshots/06_ezeq.png" alt="云姬电脑版 简易均衡器 EZEQ 界面">
+
+  <h2>下载与安装</h2>
+  <ol>
+    <li>前往 <a href="https://github.com/Binbin-miao/yunji-win/releases/latest">Releases 发布页</a> 下载 <code>YunjiSettings-v1.7.5-win64.zip</code>。</li>
+    <li>解压到任意目录（建议使用英文路径）。</li>
+    <li>双击 <code>YunjiSettings.exe</code> 运行，无需安装 Python 或任何驱动。</li>
+  </ol>
+  <h3>从源码运行</h3>
+  <pre><code>git clone https://github.com/Binbin-miao/yunji-win.git
+cd yunji-win
+pip install -r requirements.txt
+python app/main.py</code></pre>
+
+  <h2>常见问题</h2>
+  <h3>云姬电脑版是官方软件吗？</h3>
+  <p>不是。本项目是独立开发者出于学习与跨平台便利性所做的<strong>非官方开源移植</strong>，与任何音频硬件品牌官方均无商业合作或授权关系，相关商标归原权利人所有。</p>
+  <h3>需要安装驱动吗？</h3>
+  <p>TTGK 阵营设备使用 Windows 原生 HID 驱动，无需额外安装；旋润阵营设备如未识别，可参考仓库 README 中的驱动说明。</p>
+  <h3>会修改我的设备固件吗？</h3>
+  <p>软件只会按你的操作读写设备的可配置参数（音量、EQ、滤波等），不会刷写固件。所有写入操作都需要你主动点击保存。</p>
+
+  <h2>免责声明</h2>
+  <div class="note">
+    本项目为个人爱好者的开源移植与研究成果，与「云姬」「旋润」「TTGK」或任何关联音频硬件制造商官方<strong>无商业合作或授权关系</strong>；
+    界面与文档中出现的品牌名称、型号名称仅用于客观标示硬件兼容范围，其商标与知识产权归原合法权利人所有。
+    软件按 MIT 许可证「按现状（AS-IS）」提供，使用本工具调节设备所带来的风险由使用者自行承担。
+  </div>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>
+      <a href="https://github.com/Binbin-miao/yunji-win">GitHub 仓库</a> ·
+      <a href="https://github.com/Binbin-miao/yunji-win/releases">下载发布版</a> ·
+      <a href="https://github.com/Binbin-miao/yunji-win/issues">问题反馈</a> ·
+      <a href="https://github.com/Binbin-miao/yunji-win/blob/main/docs/%E5%8D%8F%E8%AE%AE%E5%8F%82%E8%80%83.md">协议参考文档</a>
+    </p>
+    <p>云姬电脑版（YunjiSettings Windows Port）· MIT License · Copyright (c) 2026 宾宾</p>
+  </div>
+</footer>
+
+</body>
+</html>
