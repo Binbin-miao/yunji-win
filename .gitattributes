@@ -1,0 +1,18 @@
+# 统一换行符：仓库内一律存 LF，避免 Windows 上写文件时 \n 被转成 \r\n
+# 导致「工作区内容」与「git 对象内容」不一致（本项目用 API 推送时会踩到）
+* text=auto eol=lf
+
+# 二进制文件不做任何转换
+*.png binary
+*.ico binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.zip binary
+*.exe binary
+*.ttf binary
+*.ttc binary
+
+# Windows 批处理需要 CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
