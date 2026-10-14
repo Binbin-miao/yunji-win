@@ -79,7 +79,9 @@
 
 ### 方式一：下载开箱即用的 Release 版本（推荐）
 
-前往 [GitHub Releases](https://github.com/Binbin-miao/yunji-win/releases) 页面，下载最新的 `YunjiSettings-v1.7.5-win64.zip`，解压后双击运行 `YunjiSettings.exe` 即可使用。
+前往 [GitHub Releases](https://github.com/Binbin-miao/yunji-win/releases) 页面，下载最新的 `YunjiSettings-v1.7.5.1-win64.zip`，解压后双击运行 `YunjiSettings.exe` 即可使用。
+
+> 版本号规则：`1.7.5` 对应官方安卓版版本，末尾的 `.1` 是本移植版自己的修订号。
 
 ### 方式二：从源码运行
 
