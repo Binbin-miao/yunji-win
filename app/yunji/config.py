@@ -84,9 +84,22 @@ PROEQ_DEFAULT_FREQ = [60, 120, 250, 500, 1000, 2000, 4000, 8000]
 PROEQ_DEFAULT_Q = [0.75] * 8
 PROEQ_DEFAULT_TYPE = 2         # peaking
 
+# ---- EQ 滤波器类型码（写入设备包的 type 字节）----
+# 逆向确认：官方 Android 版只会发送 2（peaking），typeList 是死数据。
+# 下面 shelf 的编码值是**推测**，未经真机验证，如需实验可在本处调整。
+EQ_TYPE_PEAKING = 2
+EQ_TYPE_LOW_SHELF = 1
+EQ_TYPE_HIGH_SHELF = 3
+
+# ---- 实验性功能开关（默认关闭）----
+# 开启后允许在 ProEQ 中选择低架/高架滤波器。风险：设备是否支持未知，
+# biquad 参数若不匹配可能导致滤波器不稳定（刺耳噪音）。
+EXPERIMENTAL_SHELF_ENABLED = False
+
 # ---- EQ 计算采样率 ----
 EQ_DEVICE_SAMPLE_RATE = 96000.0
 EQ_DISPLAY_SAMPLE_RATE = 48000.0
+
 
 # ---- UI 文案 ----
 S = {
@@ -189,4 +202,53 @@ S = {
     "notice_agree": "同意并继续",
     "notice_exit": "退出",
     "load_failed_prefix": "加载失败：",
+    # ---- 旁通 / A-B 对比 ----
+    "bypass_on": "已旁通",
+    "bypass_off": "已恢复",
+    "bypass_hint": "旁通：临时把 EQ 置为平直以便对比原声（按住空格键临时旁通）",
+    "bypass_button": "旁通",
+    # ---- 增益补偿 ----
+    "preamp_button": "增益补偿",
+    "preamp_none_needed": "当前曲线无正增益，无需补偿",
+    "preamp_applied": "已设置整体偏移为 %d dB（峰值 %+.1f dB）",
+    "preamp_clamped": (
+        "峰值增益 %+.1f dB，但整体偏移下限为 %d dB，"
+        "无法完全补偿。建议降低增益最大的频段以避免削波。"
+    ),
+    "preamp_title": "增益补偿",
+    # ---- 导入 ----
+    "import_title": "导入 EQ",
+    "import_hint": (
+        "支持以下格式（可直接从 AutoEQ / squig.link 复制）：\n"
+        "· Equalizer APO：Filter 1: ON PK Fc 105 Hz Gain -3.2 dB Q 0.70\n"
+        "· GraphicEQ：GraphicEQ: 20 -3.5; 25 -3.2; 31 -2.9; ...\n"
+        "· Wavelet：{\"graphicEQ\": [[20,-3.5],[25,-3.2], ...]}\n"
+        "· 本工具格式：{\"bands\":[{\"freq\":60,\"q\":0.75,\"gain\":0,\"type\":2}]}"
+    ),
+    "import_ok": "导入成功（%d 段，拟合误差 %.2f dB）",
+    "import_ok_exact": "导入成功（%d 段）",
+    "import_no_bands": "未识别到任何滤波器参数",
+    "import_failed": "导入失败：%s",
+    "import_fit_note": "源曲线为 %d 段，已自动拟合为设备的 8 段",
+    # ---- 导出分享 ----
+    "export_image_title": "导出分享图",
+    "export_image_saved": "分享图已保存：%s",
+    "export_image_failed": "保存失败：%s",
+    # ---- 目标曲线 ----
+    "target_none": "不显示",
+    "target_label": "目标曲线",
+    # ---- 滤波器类型 ----
+    "eq_type_peak": "峰值",
+    "eq_type_low_shelf": "低架",
+    "eq_type_high_shelf": "高架",
+    "shelf_warning_title": "实验性功能确认",
+    "shelf_warning_body": (
+        "<p><b>低架 / 高架滤波器尚未经过真机验证。</b></p>"
+        "<p>官方 App 只使用过「峰值」类型，硬件是否识别其他类型未知。"
+        "若设备不支持，屏幕上显示的曲线与实际听到的效果会不一致；"
+        "极端参数下还可能出现不稳定的声音。</p>"
+        "<p>建议先用一段小幅度的低架滤波试听确认。确定要继续吗？</p>"
+    ),
+    # ---- 扫描失败提示 ----
+    "scan_failed_prefix": "设备扫描异常：",
 }

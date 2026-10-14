@@ -1,14 +1,21 @@
 # -*- coding: utf-8 -*-
-"""主窗口：页面导航、设备会话、热插拔监测、启动流程"""
+"""主窗口：页面导航、设备会话、热插拔监测、启动流程
+
+性能要点（相对旧实现）：
+- 设备扫描统一交给 ScanService（后台线程 + 缓存 + 单飞），
+  GUI 线程不再做 USB 枚举；原先「列表页 1.5s 定时器 + 主窗口 2s 热插拔定时器」
+  两个阻塞定时器合并为一个后台扫描服务。
+- 每个设备会话持有独立的单线程执行器，保证 USB 事务不交错。
+"""
 from __future__ import annotations
 
+import logging
 from typing import List, Optional
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QEvent, QThreadPool, QTimer
 from PySide6.QtWidgets import (
     QApplication,
     QMainWindow,
-    QMessageBox,
     QStackedWidget,
     QWidget,
 )
@@ -16,9 +23,10 @@ from PySide6.QtWidgets import (
 from ..config import APP_NAME_FULL, S, VENDER_ID_TTGK, VENDER_ID_XUAN_RUN, WINDOW_TITLE
 from ..devices.ttgk import TtgkDevice
 from ..devices.xuanrun import XuanRunDevice
-from ..storage import AppState
+from ..storage import get_app_state
 from ..usb import scanner
 from ..usb.base import BaseTransport, DeviceEntry, TransportError
+from ..usb.scan_service import ScanService
 from ..usb.simulator import SimulatedTransport
 from .common import AsyncRunner
 from .dialogs import ContentDialog
@@ -27,11 +35,13 @@ from .pages_eq import EzeqPage, ProEqPage
 from .pages_misc import AboutPage, PolicyDialog
 from .widgets import show_toast
 
+log = logging.getLogger(__name__)
+
 APP_STYLE_INIT = None
 
 
 class DeviceSession:
-    """一次设备连接会话（传输层 + 协议对象）"""
+    """一次设备连接会话（传输层 + 协议对象 + 串行执行器）"""
 
     def __init__(self, entry: DeviceEntry, transport: BaseTransport):
         self.entry = entry
@@ -45,12 +55,20 @@ class DeviceSession:
         else:
             self.tk = TtgkDevice(transport)
         self.sp = {}
+        # 单线程池：同一设备的 USB 事务严格串行，避免读写交错
+        # （DeviceSession 非 QObject，故线程池不挂父对象，由 runner 持有引用）
+        self.runner = AsyncRunner(QThreadPool())
+        self.runner.pool.setMaxThreadCount(1)
 
     def close(self):
         try:
-            self.transport.close()
+            self.runner.pool.waitForDone(2000)
         except Exception:
             pass
+        try:
+            self.transport.close()
+        except Exception:
+            log.debug("关闭传输层失败", exc_info=True)
 
 
 class MainWindow(QMainWindow):
@@ -60,8 +78,8 @@ class MainWindow(QMainWindow):
         self.resize(500, 840)
         self.setMinimumSize(420, 640)
 
-        self.state = AppState()
-        self.runner = AsyncRunner()
+        self.state = get_app_state()
+        self.runner = AsyncRunner()          # 非设备任务（打开设备、更新检查等）
         self.stack = QStackedWidget()
         self.setCentralWidget(self.stack)
         self.use_simulator = False
@@ -69,19 +87,21 @@ class MainWindow(QMainWindow):
         self.session: Optional[DeviceSession] = None
         self._sim_session_seq = 0
 
+        # 后台扫描服务（取代原先两个阻塞定时器）—— 需先于列表页创建
+        self.scan_service = ScanService(parent=self)
+
         self.list_page = DeviceListPage(self)
         self._push(self.list_page)
 
-        # 热插拔监测
-        self._hotplug_timer = QTimer(self)
-        self._hotplug_timer.setInterval(2000)
-        self._hotplug_timer.timeout.connect(self._check_hotplug)
-        self._hotplug_timer.start()
+        self.scan_service.updated.connect(self._on_devices_updated)
+        self.scan_service.failed.connect(self._on_scan_failed)
+        self.scan_service.start()
 
     # ================= 导航 =================
     def run_async(self, fn, on_ok=None, on_err=None):
-        """页面通过控制器调用：在工作线程执行设备 IO"""
-        return self.runner.run(fn, on_ok, on_err)
+        """页面通过控制器调用：设备 IO 走会话串行队列，保证不交错"""
+        runner = self.session.runner if self.session is not None else self.runner
+        return runner.run(fn, on_ok, on_err)
 
     def _push(self, page: QWidget):
         self.stack.addWidget(page)
@@ -96,17 +116,18 @@ class MainWindow(QMainWindow):
         page.deleteLater()
         self.stack.setCurrentWidget(self.pages[-1])
         if isinstance(self.pages[-1], DeviceListPage):
-            self.pages[-1].refresh()
+            self.pages[-1].apply_entries(self.scan())
 
     def go_back(self):
         self._pop()
 
     # ================= 设备 =================
     def scan(self) -> List[DeviceEntry]:
-        try:
-            return scanner.scan_devices(include_known=True)
-        except Exception:
-            return []
+        """读扫描缓存（非阻塞）"""
+        return self.scan_service.entries()
+
+    def request_scan(self):
+        self.scan_service.request()
 
     def simulated_entries(self) -> List[DeviceEntry]:
         return [
@@ -123,6 +144,7 @@ class MainWindow(QMainWindow):
 
     def forget_device(self, entry: DeviceEntry):
         self.state.forget_device(entry.name, entry.pid)
+        self.request_scan()
 
     def open_device(self, entry: DeviceEntry):
         if entry.is_sim:
@@ -192,25 +214,31 @@ class MainWindow(QMainWindow):
     def show_about(self):
         self._push(AboutPage(self))
 
-    # ================= 热插拔 =================
-    def _check_hotplug(self):
+    # ================= 热插拔（由扫描信号驱动）=================
+    def _on_devices_updated(self, entries: List[DeviceEntry]):
+        if self.pages and isinstance(self.pages[-1], DeviceListPage):
+            self.pages[-1].apply_entries(entries)
+        self._check_hotplug(entries)
+
+    def _on_scan_failed(self, msg: str):
+        log.warning("扫描失败: %s", msg)
+        if self.pages and isinstance(self.pages[-1], DeviceListPage):
+            self.pages[-1].show_scan_error(msg)
+
+    def _check_hotplug(self, entries: List[DeviceEntry]):
         session = self.session
-        if session is None:
+        if session is None or session.entry.is_sim:
             return
-        if session.entry.is_sim:
-            return
-        entries = self.scan()
         still = any(e.connected and e.vid == session.entry.vid
                     and e.pid == session.entry.pid for e in entries)
         if not still:
             self._close_session()
-            # 关闭设备相关页面，回到列表
             while len(self.pages) > 1 and not isinstance(self.pages[-1], DeviceListPage):
                 page = self.pages.pop()
                 self.stack.removeWidget(page)
                 page.deleteLater()
             self.stack.setCurrentWidget(self.list_page)
-            self.list_page.refresh()
+            self.list_page.apply_entries(entries)
             show_toast(self, "设备已断开")
 
     def _close_session(self):
@@ -218,8 +246,21 @@ class MainWindow(QMainWindow):
             self.session.close()
             self.session = None
 
+    # ================= 生命周期 =================
+    def changeEvent(self, event):  # noqa: N802
+        if event.type() == QEvent.WindowStateChange:
+            if self.isMinimized():
+                self.scan_service.pause()
+            else:
+                self.scan_service.resume()
+        super().changeEvent(event)
+
     def closeEvent(self, event):  # noqa: N802
         self._close_session()
+        try:
+            self.scan_service.shutdown()
+        except Exception:
+            pass
         super().closeEvent(event)
 
     # ================= 启动流程 =================

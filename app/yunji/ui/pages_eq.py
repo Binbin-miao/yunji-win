@@ -4,14 +4,24 @@
 对照 Android 版 ProEQHelper / EZEQHelper 的交互与上传时机：
 - 数值改动（滑块释放 / 弹窗确认 / 模板 / 重置 / 预设加载）→ 刷新显示 → 保存本地 → 上传设备
 - 音乐/游戏配置切换仅切换界面参数（不立即上传），与 Android 版一致
+
+本版新增：
+- 旁通 / A-B 对比（工具栏按钮 + 空格键按住临时旁通）
+- 增益补偿（自动按峰值增益设置整体偏移，防削波）
+- 多格式导入（Equalizer APO / GraphicEQ / Wavelet / 原生）+ 任意段数自动拟合到 8 段
+- 目标曲线叠加与悬停读数（见 widgets.EQCurveWidget）
+- 导出分享图
+- 低架/高架滤波器（实验性，默认关闭）
 """
 from __future__ import annotations
 
 import json
+import logging
 from typing import List, Optional
 
 from PySide6.QtCore import QSize, Qt, QTimer
 from PySide6.QtWidgets import (
+    QComboBox,
     QDialog,
     QFrame,
     QGridLayout,
@@ -26,6 +36,10 @@ from PySide6.QtWidgets import (
 
 from ..config import (
     EQ_MAX_PRESET_COUNT,
+    EQ_TYPE_HIGH_SHELF,
+    EQ_TYPE_LOW_SHELF,
+    EQ_TYPE_PEAKING,
+    EXPERIMENTAL_SHELF_ENABLED,
     PROEQ_DEFAULT_FREQ,
     PROEQ_DEFAULT_Q,
     PROEQ_DEFAULT_TYPE,
@@ -36,11 +50,15 @@ from ..config import (
     TTGK_MIN_EQ_OFFSET,
 )
 from ..presets import EzeqPresetStore, ProEqPresetStore
-from ..protocol.eqdata import EQData
+from ..protocol import targets as target_mod
+from ..protocol.eqdata import EQData, type_name
+from ..protocol.eqformat import parse_eq_text
+from ..protocol.fitting import fit_parsed
 from ..protocol.templates import load_ezeq_config, load_ezeq_templates, load_help_text
 from .common import Toolbar, device_icon_pixmap, setting_icon
 from .dialogs import (
     ConfirmDialog,
+    ContentDialog,
     HelpDialog,
     ImportExportDialog,
     NumberInputDialog,
@@ -49,6 +67,12 @@ from .dialogs import (
 )
 from .theme import C_SECONDARY_BG
 from .widgets import EQCurveWidget, CircleValueButton, card_frame, make_divider, show_toast
+
+log = logging.getLogger(__name__)
+
+#: 滤波器类型循环顺序（实验性功能开启后可用）
+_TYPE_CYCLE = [EQ_TYPE_PEAKING, EQ_TYPE_LOW_SHELF, EQ_TYPE_HIGH_SHELF]
+_TYPE_SHORT = {EQ_TYPE_PEAKING: "峰", EQ_TYPE_LOW_SHELF: "低", EQ_TYPE_HIGH_SHELF: "高"}
 
 
 def _fmt_freq(f: int) -> str:
@@ -61,6 +85,38 @@ def _fmt_freq(f: int) -> str:
 
 def _fmt_gain(g: float) -> str:
     return f"+{g:.1f}" if g > 0 else f"{g:.1f}"
+
+
+def _normalize_band_freqs(freqs, lo: int = 20, hi: int = 20000):
+    """把频点整理成严格递增且落在 [lo, hi] 内的整数序列
+
+    设备要求 8 个频点单调递增（UI 的 _edit_freq 也是按此约束校验的）。
+    导入少于 8 段的配置时，源频点与默认频点混在一起可能乱序甚至重复，
+    直接下发会产生非法参数，故必须归一化。
+    """
+    n = len(freqs)
+    if n == 0:
+        return []
+    fc = sorted(float(v) for v in freqs)
+
+    for i in range(1, n):                       # 保证严格递增
+        if fc[i] <= fc[i - 1]:
+            fc[i] = fc[i - 1] + 1
+
+    if fc[-1] > hi:                             # 越上界则整体回压
+        shift = fc[-1] - hi
+        fc = [v - shift for v in fc]
+    if fc[0] < lo:                              # 越下界则整体上推
+        shift = lo - fc[0]
+        fc = [v + shift for v in fc]
+
+    for i in range(1, n):                       # 回压后可能又产生冲突
+        if fc[i] <= fc[i - 1]:
+            fc[i] = fc[i - 1] + 1
+
+    return [int(round(v)) for v in fc]
+
+
 
 
 # ============================================================ ProEQ 页
@@ -90,13 +146,27 @@ class ProEqPage(QWidget):
         self._upload_timer.setInterval(350)
         self._upload_timer.timeout.connect(self._upload_now)
 
+        # 旁通状态：None=未旁通；list=保存的增益快照
+        self._bypass_snapshot: Optional[list] = None
+        self._bypass_offset = 0
+        self._bypass_hold = False
+        self._shelf_enabled = bool(EXPERIMENTAL_SHELF_ENABLED)
+        self._target_id = "__none__"
+        self._last_fit_note = ""
+
+        # 曲线重绘节流（拖动滑块时合并到 ~60fps）
+        self._curve_pending = False
+
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
         self.toolbar = Toolbar(S["main_setting_eq_pro"], self.ctrl.go_back)
+        self.bypass_btn = self.toolbar.add_right_button(S["bypass_button"], self._toggle_bypass)
+        self.bypass_btn.setToolTip(S["bypass_hint"])
         self.toolbar.add_right_button("导入", self._import)
         self.toolbar.add_right_button("导出", self._export)
         root.addWidget(self.toolbar)
+        self.setFocusPolicy(Qt.StrongFocus)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -130,10 +200,19 @@ class ProEqPage(QWidget):
         self.q_labels: List[QLabel] = []
         self.f_labels: List[QLabel] = []
         self.g_labels: List[QLabel] = []
+        self.t_labels: List[QLabel] = []
         self.sliders: List[QSlider] = []
         for i in range(8):
             col = QVBoxLayout()
             col.setSpacing(6)
+            t_lab = QLabel()
+            t_lab.setAlignment(Qt.AlignCenter)
+            t_lab.setCursor(Qt.PointingHandCursor)
+            t_lab.setToolTip("点击切换滤波器类型（实验性功能）")
+            t_lab.setStyleSheet("font-size:10px; color:#888;")
+            t_lab.mouseReleaseEvent = lambda _e, idx=i: self._cycle_type(idx)  # type: ignore
+            t_lab.setVisible(self._shelf_enabled)
+            col.addWidget(t_lab)
             q_lab = QLabel()
             q_lab.setAlignment(Qt.AlignCenter)
             q_lab.setCursor(Qt.PointingHandCursor)
@@ -160,6 +239,7 @@ class ProEqPage(QWidget):
             g_lab.mouseReleaseEvent = lambda _e, idx=i: self._edit_gain(idx)  # type: ignore
             col.addWidget(g_lab)
             cols.addLayout(col)
+            self.t_labels.append(t_lab)
             self.q_labels.append(q_lab)
             self.f_labels.append(f_lab)
             self.g_labels.append(g_lab)
@@ -176,6 +256,10 @@ class ProEqPage(QWidget):
         self.offset_value = QLabel("0")
         self.offset_value.setObjectName("rowValue")
         off_row.addWidget(self.offset_value)
+        self.preamp_btn = QPushButton(S["preamp_button"])
+        self.preamp_btn.setToolTip("按当前曲线的峰值增益自动设置整体偏移，避免削波")
+        self.preamp_btn.clicked.connect(self._auto_preamp)
+        off_row.addWidget(self.preamp_btn)
         c.addLayout(off_row)
         self.offset_slider = QSlider(Qt.Horizontal)
         self.offset_slider.setRange(0, TTGK_MAX_EQ_OFFSET - TTGK_MIN_EQ_OFFSET)
@@ -189,10 +273,24 @@ class ProEqPage(QWidget):
         c.addWidget(alert)
         v.addWidget(card)
 
-        # 曲线
+        # 曲线 + 目标曲线选择
         card2 = card_frame()
         c2 = QVBoxLayout(card2)
         c2.setContentsMargins(8, 8, 8, 8)
+        trow = QHBoxLayout()
+        t_lab2 = QLabel(S["target_label"])
+        t_lab2.setObjectName("rowLabel")
+        trow.addWidget(t_lab2)
+        trow.addStretch(1)
+        self.target_box = QComboBox()
+        self.target_box.setMinimumWidth(200)
+        self.target_box.addItem(S["target_none"], "__none__")
+        for c in target_mod.list_targets():
+            self.target_box.addItem(c.label, c.id)
+        self.target_box.currentIndexChanged.connect(
+            lambda _i: self._set_target(self.target_box.currentData()))
+        trow.addWidget(self.target_box)
+        c2.addLayout(trow)
         self.curve = EQCurveWidget()
         self.curve.setFixedHeight(200)
         c2.addWidget(self.curve)
@@ -216,12 +314,24 @@ class ProEqPage(QWidget):
         row.addWidget(self.btn_save)
         row.addWidget(self.btn_load)
         c3.addLayout(row)
+        row2 = QHBoxLayout()
+        self.btn_share = QPushButton(S["export_image_title"])
+        self.btn_share.setObjectName("bigAction")
+        self.btn_share.clicked.connect(self._export_image)
+        self.btn_shelf = QPushButton("滤波器类型（实验性）")
+        self.btn_shelf.setObjectName("bigAction")
+        self.btn_shelf.clicked.connect(self._enable_shelf)
+        row2.addWidget(self.btn_share)
+        row2.addWidget(self.btn_shelf)
+        c3.addLayout(row2)
         v.addWidget(card3)
         v.addStretch(1)
 
         self.refresh_display()
+        self._sync_target_buttons()
         # 载入预设文件
         self._reload_store()
+
 
     def _reload_store(self):
         self.store = ProEqPresetStore(self.entry.vid, self.entry.pid)
@@ -233,6 +343,8 @@ class ProEqPage(QWidget):
             self.q_labels[i].setText(self._fmt_q(d.q_list[i]))
             self.f_labels[i].setText(_fmt_freq(int(d.fc_list[i])))
             self.g_labels[i].setText(_fmt_gain(d.gain_list[i]))
+            if self._shelf_enabled:
+                self.t_labels[i].setText(_TYPE_SHORT.get(int(d.type_list[i]), "?"))
             self._suppress = True
             self.sliders[i].setValue(int(d.gain_list[i] * 10) + 120)
             self._suppress = False
@@ -240,7 +352,40 @@ class ProEqPage(QWidget):
         self.offset_slider.setValue(int(d.offset) - TTGK_MIN_EQ_OFFSET)
         self.offset_value.setText(f"+{d.offset}" if d.offset > 0 else str(d.offset))
         self._suppress = False
+        self._apply_target()
         self.curve.set_data(d)
+
+    def _apply_target(self):
+        """把当前选择的目标曲线挂到曲线上"""
+        if self._target_id in ("", "__none__"):
+            self.curve.set_target(None)
+            return
+        self.curve.set_target(target_mod.load_target(self._target_id))
+
+    def _set_target(self, target_id: str):
+        self._target_id = target_id
+        self._sync_target_buttons()
+        self._apply_target()
+
+    def _sync_target_buttons(self):
+        """把当前选择同步到下拉框（不触发信号）"""
+        idx = self.target_box.findData(self._target_id)
+        if idx < 0:
+            idx = 0
+        self.target_box.blockSignals(True)
+        self.target_box.setCurrentIndex(idx)
+        self.target_box.blockSignals(False)
+
+    def _schedule_curve(self):
+        """16ms 合并重绘，避免滑块每个像素都重算曲线"""
+        if self._curve_pending:
+            return
+        self._curve_pending = True
+        QTimer.singleShot(16, self._flush_curve)
+
+    def _flush_curve(self):
+        self._curve_pending = False
+        self.curve.set_data(self.data)
 
     @staticmethod
     def _fmt_q(q: float) -> str:
@@ -254,10 +399,12 @@ class ProEqPage(QWidget):
         gain = (self.sliders[idx].value() - 120) / 10.0
         self.data.gain_list[idx] = gain
         self.g_labels[idx].setText(_fmt_gain(gain))
-        self.curve.set_data(self.data)
+        self._schedule_curve()
 
     def _commit_gain(self, idx: int):
+        self._flush_curve()          # 松手立刻定格到最终值
         self._after_change()
+
 
     def _on_offset_move(self, prog: int):
         if self._suppress:
@@ -323,17 +470,162 @@ class ProEqPage(QWidget):
         data = self.data.deepcopy()
 
         def op():
-            self.tk.upload_eq(data)
-            return True
+            # upload_eq 返回是否完成「生效确认」；False 表示已写入但确认失败
+            return self.tk.upload_eq(data)
+
+        def ok(confirmed):
+            if confirmed is False:
+                show_toast(self, "EQ 已写入，但生效确认失败，请手动调整一次音量")
+
+        self.ctrl.run_async(op, ok,
+                            lambda m: show_toast(self, S["toast_eq_upload_failed"] + f" ({m})"))
+
+    # ---------------- 旁通 / A-B 对比 ----------------
+    def _toggle_bypass(self):
+        if self._bypass_snapshot is None:
+            self._enter_bypass()
+        else:
+            self._exit_bypass()
+
+    def _enter_bypass(self):
+        """保存当前增益并写入平直曲线"""
+        if self._bypass_snapshot is not None:
+            return
+        self._bypass_snapshot = list(self.data.gain_list)
+        self._bypass_offset = self.data.offset
+
+        flat = self.data.deepcopy()
+        flat.gain_list = [0.0] * len(flat.gain_list)
+        flat.offset = 0
+
+        def op():
+            return self.tk.upload_eq(flat)
 
         self.ctrl.run_async(op, None,
-                            lambda m: show_toast(self, S["toast_eq_upload_failed"] + f" ({m})"))
+                            lambda m: show_toast(self, "旁通失败：" + str(m)))
+        self.bypass_btn.setText("已旁通")
+        self.bypass_btn.setStyleSheet("color:#c53030; font-weight:bold;")
+        # 界面同步显示平直曲线，避免与设备状态不符
+        self.data.gain_list = [0.0] * 8
+        self.data.offset = 0
+        self.refresh_display()
+        show_toast(self, S["bypass_on"])
+
+    def _exit_bypass(self):
+        """恢复旁通前的增益"""
+        snapshot = self._bypass_snapshot
+        if snapshot is None:
+            return
+        offset = getattr(self, "_bypass_offset", 0)
+        self._bypass_snapshot = None
+
+        self.data.gain_list = list(snapshot)
+        self.data.offset = offset
+        self.bypass_btn.setText(S["bypass_button"])
+        self.bypass_btn.setStyleSheet("")
+        self.refresh_display()
+        self._save_ui()
+        self._schedule_upload()
+        show_toast(self, S["bypass_off"])
+
+    # 空格键：按住临时旁通，松开恢复（焦点在按钮上时事件被按钮消费，不会误触发）
+    def keyPressEvent(self, event):  # noqa: N802
+        if event.key() == Qt.Key_Space and not event.isAutoRepeat():
+            if self._bypass_snapshot is None:
+                self._bypass_hold = True
+                self._enter_bypass()
+            event.accept()
+            return
+        super().keyPressEvent(event)
+
+    def keyReleaseEvent(self, event):  # noqa: N802
+        if event.key() == Qt.Key_Space and not event.isAutoRepeat():
+            if self._bypass_hold:
+                self._bypass_hold = False
+                self._exit_bypass()
+            event.accept()
+            return
+        super().keyReleaseEvent(event)
+
+    # ---------------- 增益补偿（防削波）----------------
+    def _auto_preamp(self):
+        peak = self.data.peak_gain_db()
+        if peak <= 0.05:
+            ContentDialog(self, S["preamp_title"],
+                          f"<p>{S['preamp_none_needed']}</p>"
+                          f"<p style='color:#888'>峰值增益 {peak:+.1f} dB</p>").exec()
+            return
+
+        target = -int(round(peak))            # 向上取整为负
+        target = max(TTGK_MIN_EQ_OFFSET, min(TTGK_MAX_EQ_OFFSET, target))
+
+        if target > -peak + 0.05:
+            # 下限不够，无法完全补偿
+            html = (f"<p>{S['preamp_clamped'] % (peak, TTGK_MIN_EQ_OFFSET)}</p>"
+                    f"<p style='color:#888'>已将整体偏移设为 {target} dB</p>")
+            ContentDialog(self, S["preamp_title"], html).exec()
+        else:
+            show_toast(self, S["preamp_applied"] % (target, peak))
+
+        self.data.offset = int(target)
+        self._after_change()
+
+    # ---------------- 滤波器类型（实验性）----------------
+    def _enable_shelf(self):
+        if self._shelf_enabled:
+            self._shelf_enabled = False
+            for lab in self.t_labels:
+                lab.setVisible(False)
+            self.btn_shelf.setText("滤波器类型（实验性）")
+            show_toast(self, "已隐藏滤波器类型选择")
+            return
+        if not ConfirmDialog.ask(self, S["shelf_warning_title"], S["shelf_warning_body"]):
+            return
+        self._shelf_enabled = True
+        for lab in self.t_labels:
+            lab.setVisible(True)
+        self.btn_shelf.setText("隐藏滤波器类型")
+        self.refresh_display()
+        show_toast(self, "已启用；官方从未使用过峰值以外的类型，请谨慎验证")
+
+    def _cycle_type(self, idx: int):
+        if not self._shelf_enabled:
+            return
+        cur = int(self.data.type_list[idx])
+        try:
+            nxt = _TYPE_CYCLE[(_TYPE_CYCLE.index(cur) + 1) % len(_TYPE_CYCLE)]
+        except ValueError:
+            nxt = EQ_TYPE_PEAKING
+        self.data.type_list[idx] = nxt
+        self._after_change()
+
+    # ---------------- 导出分享图 ----------------
+    def _export_image(self):
+        from PySide6.QtWidgets import QFileDialog
+        from .share_card import render_share_card
+
+        default = f"YunjiEQ_{self.entry.display_name}.png"
+        path, _ = QFileDialog.getSaveFileName(
+            self, S["export_image_title"], default, "PNG 图片 (*.png)")
+        if not path:
+            return
+        try:
+            target = target_mod.load_target(self._target_id) \
+                if self._target_id not in ("", "__none__") else None
+            pm = render_share_card(self.data, self.entry.display_name, target)
+            if not pm.save(path, "PNG"):
+                raise RuntimeError("保存失败")
+            show_toast(self, S["export_image_saved"] % path)
+        except Exception as e:  # noqa: BLE001
+            log.exception("导出分享图失败")
+            show_toast(self, S["export_image_failed"] % e)
 
     # ---------------- 操作 ----------------
     def _reset(self):
         self.data.gain_list = [0.0] * 8
         self.data.offset = 0
         self._after_change()
+
 
     def _save_preset(self):
         self._reload_store()
@@ -376,41 +668,86 @@ class ProEqPage(QWidget):
         self._upload_now()
 
     def _import(self):
-        if not ConfirmDialog.ask(self, S["text_confirm"], S["eq_import_alert"]):
-            return
-        text = ImportExportDialog.ask_import(self)
+        text = ImportExportDialog.ask_import(self, hint=S["import_hint"])
         if not text:
             return
+        self.apply_import_text(text)
+
+    def apply_import_text(self, text: str) -> bool:
+        """解析并应用导入文本（与 UI 解耦，便于测试）
+
+        返回是否成功。
+        """
         try:
-            raw = json.loads(text)
-            bands = raw.get("bands")
-            if not isinstance(bands, list) or not bands:
-                raise ValueError("bad")
-            data = EQData()
-            for i, b in enumerate(bands[:8]):
-                data.fc_list[i] = int(b.get("freq", data.fc_list[i]))
-                data.q_list[i] = float(b.get("q", data.q_list[i]))
-                data.gain_list[i] = float(b.get("gain", 0))
-                data.type_list[i] = int(b.get("type", 2))
+            parsed = parse_eq_text(text)
+            if parsed.is_empty:
+                show_toast(self, S["import_no_bands"])
+                return False
+
+            # 源就是 8 段以内的参数式配置 → 直接采用，不做拟合
+            direct = (bool(parsed.bands) and not parsed.graphic
+                      and len(parsed.bands) <= 8)
+            if direct:
+                # 以默认 8 段为骨架，把源段填进去后按频率排序，
+                # 再归一化频点（设备要求严格递增）
+                tuples = [
+                    (float(PROEQ_DEFAULT_FREQ[i]), float(PROEQ_DEFAULT_Q[i]),
+                     0.0, EQ_TYPE_PEAKING)
+                    for i in range(8)
+                ]
+                for i, b in enumerate(sorted(parsed.bands, key=lambda x: x.freq)):
+                    tuples[i] = (float(b.freq), float(b.q), float(b.gain), int(b.type))
+                tuples.sort(key=lambda t: t[0])
+
+                data = EQData()
+                data.fc_list = _normalize_band_freqs([t[0] for t in tuples])
+                data.q_list = [float(t[1]) for t in tuples]
+                data.gain_list = [round(float(t[2]), 1) for t in tuples]
+                data.type_list = [int(t[3]) for t in tuples]
+                note = S["import_ok_exact"] % len(parsed.bands)
+            else:
+                result = fit_parsed(parsed)
+                data = EQData()
+                for i in range(8):
+                    data.fc_list[i] = int(round(result.centers[i]))
+                    data.q_list[i] = float(result.qs[i])
+                    data.gain_list[i] = float(result.gains[i])
+                    data.type_list[i] = int(result.types[i])
+                note = S["import_ok"] % (result.source_bands, result.rms_error)
+                if result.needs_fit:
+                    log.info("源曲线 %d 段，已拟合为 8 段（RMS %.2f dB）",
+                             result.source_bands, result.rms_error)
+
+            if parsed.preamp is not None:
+                pre = int(round(parsed.preamp))
+                data.offset = max(TTGK_MIN_EQ_OFFSET,
+                                  min(TTGK_MAX_EQ_OFFSET, pre))
+
             self.data = data
             self.refresh_display()
             self._save_ui()
             self._upload_now()
-            show_toast(self, "导入成功")
-        except Exception:
-            show_toast(self, S["toast_invalid_data"])
+            show_toast(self, note)
+            log.info("导入完成: 格式=%s 源段数=%s 直接采用=%s",
+                     parsed.fmt, len(parsed.bands) or len(parsed.graphic), direct)
+            return True
+        except Exception as e:  # noqa: BLE001
+            log.exception("导入失败")
+            show_toast(self, S["import_failed"] % e)
+            return False
+
 
     def _export(self):
-        bands = []
-        for i in range(8):
-            bands.append({
-                "freq": int(self.data.fc_list[i]),
-                "q": float(self.data.q_list[i]),
-                "gain": round(float(self.data.gain_list[i]), 1),
-                "type": int(self.data.type_list[i]),
-            })
-        ImportExportDialog.get_text(self, "导出 EQ", json.dumps({"bands": bands},
-                                                                ensure_ascii=False))
+        ImportExportDialog.get_text(
+            self, "导出 EQ",
+            json.dumps({"bands": [
+                {"freq": int(self.data.fc_list[i]),
+                 "q": float(self.data.q_list[i]),
+                 "gain": round(float(self.data.gain_list[i]), 1),
+                 "type": int(self.data.type_list[i])}
+                for i in range(8)
+            ], "offset": int(self.data.offset)}, ensure_ascii=False, indent=2))
+
 
 
 # ============================================================ EZEQ 页

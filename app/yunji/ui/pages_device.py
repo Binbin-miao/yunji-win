@@ -37,37 +37,70 @@ from .widgets import card_frame, make_divider, make_row, show_toast
 
 # ============================================================ 设备列表
 class DeviceRow(QWidget):
+    """设备条目行：支持原地更新（避免每次刷新都重建控件）"""
+
     def __init__(self, entry, parent_page: "DeviceListPage"):
         super().__init__()
         self.entry = entry
         self.page = parent_page
+        self._built_edit_mode = parent_page.edit_mode
+
         lay = QHBoxLayout(self)
         lay.setContentsMargins(12, 8, 12, 8)
         lay.setSpacing(12)
-        icon = QLabel()
-        icon.setPixmap(device_icon_pixmap(entry.icon, 56))
-        icon.setFixedSize(60, 60)
-        icon.setAlignment(Qt.AlignCenter)
-        lay.addWidget(icon)
+        self.icon = QLabel()
+        self.icon.setFixedSize(60, 60)
+        self.icon.setAlignment(Qt.AlignCenter)
+        lay.addWidget(self.icon)
+
         info = QVBoxLayout()
         info.setSpacing(2)
-        name = QLabel(entry.display_name)
-        name.setObjectName("title")
-        info.addWidget(name)
-        status = QLabel(S["device_status_connected"] if entry.connected else S["device_status_unconnected"])
-        status.setObjectName("statusLinked" if entry.connected else "statusUnlink")
-        info.addWidget(status)
+        self.name = QLabel()
+        self.name.setObjectName("title")
+        info.addWidget(self.name)
+        self.status = QLabel()
+        info.addWidget(self.status)
         lay.addLayout(info, 1)
-        if parent_page.edit_mode:
+
+        self.trailing = QWidget()
+        self._trail_lay = QHBoxLayout(self.trailing)
+        self._trail_lay.setContentsMargins(0, 0, 0, 0)
+        self._trail_lay.setSpacing(0)
+        lay.addWidget(self.trailing)
+
+        self.setCursor(Qt.PointingHandCursor)
+        self.update_entry(entry)
+
+    def _build_trailing(self):
+        while self._trail_lay.count():
+            item = self._trail_lay.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.deleteLater()
+        if self.page.edit_mode:
             dele = QPushButton(S["text_delete"])
             dele.setFixedWidth(64)
-            dele.clicked.connect(lambda: parent_page.delete_entry(entry))
-            lay.addWidget(dele)
-        elif entry.connected:
+            dele.clicked.connect(lambda: self.page.delete_entry(self.entry))
+            self._trail_lay.addWidget(dele)
+        elif self.entry.connected:
             chevron = QLabel("›")
             chevron.setStyleSheet("font-size:22px; color:#999;")
-            lay.addWidget(chevron)
-        self.setCursor(Qt.PointingHandCursor)
+            self._trail_lay.addWidget(chevron)
+        self._built_edit_mode = self.page.edit_mode
+
+    def update_entry(self, entry):
+        """原地更新文本/图标/状态，不重建控件"""
+        self.entry = entry
+        self.icon.setPixmap(device_icon_pixmap(entry.icon, 56))
+        self.name.setText(entry.display_name)
+        self.status.setText(S["device_status_connected"] if entry.connected
+                            else S["device_status_unconnected"])
+        self.status.setObjectName("statusLinked" if entry.connected else "statusUnlink")
+        # objectName 变更需重新应用样式
+        self.status.style().unpolish(self.status)
+        self.status.style().polish(self.status)
+        if self.page.edit_mode != self._built_edit_mode:
+            self._build_trailing()
 
     def mouseReleaseEvent(self, event):  # noqa: N802
         if event.button() == Qt.LeftButton:
@@ -75,16 +108,32 @@ class DeviceRow(QWidget):
 
 
 class DeviceListPage(QWidget):
+    """设备列表页
+
+    刷新由 ScanService.updated 信号驱动（不再自建定时器）。
+    页面不可见时只记录状态不渲染，避免在设备详情页时白白重建控件。
+    """
+
     def __init__(self, ctrl):
         super().__init__()
         self.ctrl = ctrl
         self.edit_mode = False
+        self._rows = {}                     # key -> frame
+        self._pending_entries = None
+
         root = QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
         self.toolbar = Toolbar(S["title_device_list"], None)
         self.toolbar.add_right_button("≡", self._show_menu)
         root.addWidget(self.toolbar)
+
+        self.scan_error = QLabel()
+        self.scan_error.setWordWrap(True)
+        self.scan_error.setStyleSheet(
+            "background:#fff5f5; color:#c53030; padding:8px 12px; font-size:12px;")
+        self.scan_error.hide()
+        root.addWidget(self.scan_error)
 
         self.scroll = QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -100,17 +149,17 @@ class DeviceListPage(QWidget):
         self.empty.setStyleSheet("color:#777; font-size:14px;")
         self.vbox.addWidget(self.empty)
         self.vbox.addStretch(1)
+
         self.menu = QMenu(self)
         self.menu.addAction(S["title_about"], self.ctrl.show_about)
         self.menu.addAction(S["title_edit"], self._toggle_edit)
         self.menu.addSeparator()
         self._sim_action = self.menu.addAction("模拟设备模式", self._toggle_sim)
-        self._refresh_timer = QTimer(self)
-        self._refresh_timer.setInterval(1500)
-        self._refresh_timer.timeout.connect(self.refresh)
-        self._refresh_timer.start()
-        self.refresh()
 
+        # 首次渲染用控制器缓存（非阻塞）
+        self.apply_entries(self.ctrl.scan())
+
+    # ---------------- 菜单 ----------------
     def _show_menu(self):
         self.menu.popup(self.mapToGlobal(self.toolbar.rect().topRight()))
 
@@ -126,35 +175,73 @@ class DeviceListPage(QWidget):
         show_toast(self, "模拟设备模式：" + ("开" if self.ctrl.use_simulator else "关"))
         self.refresh()
 
+    # ---------------- 刷新 ----------------
+    def apply_entries(self, entries):
+        """由 ScanService.updated 驱动"""
+        if not self.isVisible():
+            self._pending_entries = entries      # 不可见时只记状态
+            return
+        self._render(entries)
+
+    def show_scan_error(self, msg: str):
+        if msg:
+            self.scan_error.setText(S["scan_failed_prefix"] + msg)
+            self.scan_error.show()
+        else:
+            self.scan_error.hide()
+
+    def showEvent(self, event):  # noqa: N802
+        super().showEvent(event)
+        if self._pending_entries is not None:
+            entries = self._pending_entries
+            self._pending_entries = None
+            self._render(entries)
+
     def refresh(self):
-        # 清空（保留 empty 与 stretch）；先隐藏再延迟删除，避免刷新瞬间的渲染残留
-        while self.vbox.count() > 2:
-            item = self.vbox.takeAt(0)
-            w = item.widget()
-            if w:
-                w.hide()
-                w.deleteLater()
-        entries = self.ctrl.scan()
+        """兼容入口：从控制器缓存重新渲染（编辑模式切换等场景）"""
+        self._render(self.ctrl.scan())
+
+    def _render(self, entries):
+        entries = list(entries)
         if self.ctrl.use_simulator:
             entries += self.ctrl.simulated_entries()
-        visible = [e for e in entries if e.connected or (self.edit_mode and not e.connected) or not self.edit_mode]
-        shown = 0
-        for e in entries:
-            # 未连接设备始终显示（与原版一致：历史设备保留在列表中）
-            row = DeviceRow(e, self)
-            frame = card_frame()
-            fl = QVBoxLayout(frame)
-            fl.setContentsMargins(0, 0, 0, 0)
-            fl.addWidget(row)
-            self.vbox.insertWidget(shown, frame)
-            shown += 1
-        self.empty.setVisible(shown == 0)
 
+        want = {}
+        for e in entries:
+            want[e.key] = e
+
+        # 1) 移除已消失的行
+        for key in list(self._rows.keys()):
+            if key not in want:
+                frame = self._rows.pop(key)
+                self.vbox.removeWidget(frame)
+                frame.deleteLater()
+
+        # 2) 新增 / 更新，并保证顺序
+        for idx, (key, entry) in enumerate(want.items()):
+            frame = self._rows.get(key)
+            if frame is None:
+                frame = card_frame()
+                fl = QVBoxLayout(frame)
+                fl.setContentsMargins(0, 0, 0, 0)
+                fl.addWidget(DeviceRow(entry, self))
+                self._rows[key] = frame
+            else:
+                row = frame.findChild(DeviceRow)
+                if row is not None:
+                    row.update_entry(entry)
+                else:
+                    continue
+            self.vbox.removeWidget(frame)
+            self.vbox.insertWidget(idx, frame)
+
+        self.empty.setVisible(not want)
+
+    # ---------------- 交互 ----------------
     def click_entry(self, entry):
         if self.edit_mode:
             if not entry.connected:
                 self.ctrl.forget_device(entry)
-                self.refresh()
             else:
                 show_toast(self, "已连接的设备无法删除")
             return
@@ -166,7 +253,6 @@ class DeviceListPage(QWidget):
     def delete_entry(self, entry):
         if not entry.connected:
             self.ctrl.forget_device(entry)
-            self.refresh()
 
 
 # ============================================================ 公共行组件
