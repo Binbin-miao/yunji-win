@@ -1,0 +1,82 @@
+{
+  "vendors": [
+    {
+      "id": 12230,
+      "name": "旋润",
+      "products": [
+        {
+          "id": 61691,
+          "name": "You Got Me",
+          "icon": "ic_dev_default",
+          "infoPath": "",
+          "isValid": true,
+          "additionalInfo": []
+        },
+        {
+          "id": 61692,
+          "name": "YUNJI43198PRO",
+          "icon": "ic_dev_default",
+          "infoPath": "",
+          "isValid": true,
+          "additionalInfo": []
+        },
+        {
+          "id": 61693,
+          "name": "YUNJI43198ULTRA",
+          "icon": "ic_dev_default",
+          "infoPath": "",
+          "isValid": true,
+          "additionalInfo": [
+            1234
+          ]
+        }
+      ]
+    },
+    {
+      "id": 13058,
+      "name": "TTGK",
+      "products": [
+        {
+          "id": 17377,
+          "name": "测试双43",
+          "infoPath": "",
+          "isValid": false,
+          "additionalInfo": [
+            "cb5100"
+          ],
+          "icon": "ic_dev_default"
+        },
+        {
+          "id": 17388,
+          "name": "凌云剑",
+          "icon": "ic_dev_default",
+          "infoPath": "",
+          "isValid": true,
+          "additionalInfo": [
+            "cb5100"
+          ]
+        },
+        {
+          "id": 4687,
+          "name": "Q25",
+          "icon": "ic_dev_default",
+          "infoPath": "",
+          "isValid": true,
+          "additionalInfo": [
+            "cb1200"
+          ]
+        },
+        {
+          "id": 4678,
+          "name": "云中剑",
+          "icon": "ic_dev_default",
+          "infoPath": "",
+          "isValid": true,
+          "additionalInfo": [
+            "cb1200"
+          ]
+        }
+      ]
+    }
+  ]
+}
