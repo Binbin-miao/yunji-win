@@ -5,8 +5,8 @@
 """
 APP_NAME = "云姬"
 APP_NAME_FULL = "云姬设置（非官方 Windows 版）"
-APP_VERSION = "1.7.5.1"
-VERSION_NOTE = "移植自官方安卓版 v1.7.5"
+APP_VERSION = "1.7.6"
+VERSION_NOTE = "移植自官方安卓版 v1.7.6"
 WINDOW_TITLE = f"云姬设置 v{APP_VERSION}（非官方 Windows 版）"
 
 # ---- 项目链接 ----

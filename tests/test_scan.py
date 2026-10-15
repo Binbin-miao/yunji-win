@@ -59,6 +59,40 @@ class TestProductCache(unittest.TestCase):
     def test_find_unknown_returns_none(self):
         self.assertIsNone(scanner.find_product(1, 2))
 
+    def test_qingyun_sword_present(self):
+        """青云剑（13058/17169）必须在内置产品表中
+
+        该型号来自官方 v1.7.6 的产品表；协议层与 PID 无关，
+        收录后即可直接使用（与凌云剑同厂商同芯片 cb5100）。
+        """
+        p = scanner.find_product(13058, 17169)
+        self.assertIsNotNone(p, "青云剑未收录")
+        self.assertEqual(p["name"], "青云剑")
+        self.assertEqual(p["vendor_name"], "TTGK")
+        self.assertTrue(p["valid"])
+        self.assertEqual(list(p["additional_info"]), ["cb5100"])
+
+    def test_all_known_devices_present(self):
+        """内置产品表应覆盖官方 v1.7.6 的全部 8 个型号"""
+        expected = {
+            (12230, 61691), (12230, 61692), (12230, 61693),
+            (13058, 17377), (13058, 17388), (13058, 17169),
+            (13058, 4687), (13058, 4678),
+        }
+        for vid, pid in expected:
+            self.assertIsNotNone(scanner.find_product(vid, pid),
+                                 f"缺少设备 {vid}:{pid}")
+
+    def test_device_entry_routing(self):
+        """收录后协议分派应正确：TTGK -> HID，芯片 cb5100"""
+        p = scanner.find_product(13058, 17169)
+        e = DeviceEntry(vid=13058, pid=17169, name=p["name"], icon=p["icon"],
+                        valid=p["valid"], additional_info=p["additional_info"],
+                        connected=True)
+        self.assertEqual(scanner.brand_of(e.vid), "ttgk")
+        self.assertEqual(e.chip_type, "cb5100")
+        self.assertTrue(e.valid)
+
     def test_invalidate_forces_reread(self):
         with mock.patch.object(scanner, "_read_product_list",
                                wraps=scanner._read_product_list) as m:
