@@ -14,7 +14,7 @@
 
 ## 📖 项目简介
 
-本项目为独立开发的第三方 Windows 桌面端移植版本（移植参考自官方 Android 端 v1.7.5 架构与通信协议），即社区常说的「**云姬电脑版**」。
+本项目为独立开发的第三方 Windows 桌面端移植版本（移植参考自官方 Android 端 v1.7.6 架构与通信协议），即社区常说的「**云姬电脑版**」。
 
 由于市面上多数便携式解码耳放（小尾巴）仅提供了移动端 App，Windows 用户在连接电脑使用时往往无法便捷地调节 DAC 滤波模式、耳放增益档位、麦克风输入电平，更无法调用设备内置的硬件 DSP 进行专业 Parametric EQ / Easy EQ 调音。
 
@@ -68,10 +68,23 @@
 
 ## 🎧 支持硬件
 
-| 品牌 / 协议阵营 | 代表型号 | 通信方式 | 驱动要求 | 核心特性 |
+与官方 v1.7.6 的机型列表保持一致，共 8 款：
+
+| 品牌 / 协议阵营 | 型号 | VID / PID | 通信方式 | 驱动要求 |
 | :--- | :--- | :--- | :--- | :--- |
-| **TTGK 系列** | 凌云剑、Q25 等 (CB1200 / CB5100 架构) | USB HID 中断传输 | **Windows 原生免驱** | 8 段硬件 EQ、增益、滤波、LED、声道平衡、麦克风 |
-| **旋润 系列** | YUNJI43198PRO、YUNJI43198ULTRA、You Got Me 等 | USB 控制传输 | WinUSB / libusb | 硬件音量、平衡、增益、5 档滤波、LED、防爆音 |
+| **TTGK** | 凌云剑 | `13058` / `17388` | USB HID 中断传输 | **Windows 原生免驱** |
+| **TTGK** | 青云剑 | `13058` / `17169` | USB HID 中断传输 | **Windows 原生免驱** |
+| **TTGK** | 云中剑 | `13058` / `4678` | USB HID 中断传输 | **Windows 原生免驱** |
+| **TTGK** | Q25 | `13058` / `4687` | USB HID 中断传输 | **Windows 原生免驱** |
+| **旋润** | You Got Me | `12230` / `61691` | USB 控制传输 | WinUSB / libusb |
+| **旋润** | YUNJI43198PRO | `12230` / `61692` | USB 控制传输 | WinUSB / libusb |
+| **旋润** | YUNJI43198ULTRA | `12230` / `61693` | USB 控制传输 | WinUSB / libusb |
+
+> TTGK 阵营均为 CB1200 / CB5100 架构，支持 8 段硬件 EQ、增益、滤波、LED、声道平衡、麦克风。
+> 旋润阵营支持硬件音量、平衡、增益、5 档滤波、LED、防爆音。
+
+**你的设备不在列表里？** 协议选择只由 VID 决定、与 PID 无关，所以同厂商的新型号通常
+把 PID 加进产品表即可使用，无需改代码 —— 见[设备适配指南](docs/设备适配.md)。
 
 ---
 
@@ -79,9 +92,9 @@
 
 ### 方式一：下载开箱即用的 Release 版本（推荐）
 
-前往 [GitHub Releases](https://github.com/Binbin-miao/yunji-win/releases) 页面，下载最新的 `YunjiSettings-v1.7.5.1-win64.zip`，解压后双击运行 `YunjiSettings.exe` 即可使用。
+前往 [GitHub Releases](https://github.com/Binbin-miao/yunji-win/releases) 页面，下载最新的 `YunjiSettings-v1.7.6-win64.zip`，解压后双击运行 `YunjiSettings.exe` 即可使用。
 
-> 版本号规则：`1.7.5` 对应官方安卓版版本，末尾的 `.1` 是本移植版自己的修订号。
+> 版本号规则：主体版本对应官方安卓版版本；若仅有移植版自身修订，则追加 `.N`（如 `1.7.6.1`）。
 
 ### 方式二：从源码运行
 
@@ -183,7 +196,12 @@ python tests/run_all.py --smoke  # 仅 GUI 冒烟
 TTGK 阵营设备使用 Windows 原生 HID 驱动，**无需额外安装任何驱动**，插上即用；旋润阵营设备基于 USB 控制传输，若未识别可参考本文档上方的驱动说明。
 
 **Q：云姬电脑版支持哪些设备？**
-目前支持 TTGK 阵营（凌云剑、Q25 等，CB1200 / CB5100 架构）与旋润阵营（YUNJI43198PRO、YUNJI43198ULTRA、You Got Me 等）。若你的设备未在列表内，欢迎在 [Issues](https://github.com/Binbin-miao/yunji-win/issues) 提交设备信息协助适配。
+与官方 v1.7.6 一致，共 8 款：TTGK 阵营的**凌云剑、青云剑、云中剑、Q25**，旋润阵营的 **You Got Me、YUNJI43198PRO、YUNJI43198ULTRA**（另有测试型号「测试双43」标记为不可用）。若你的设备未在列表内，欢迎在 [Issues](https://github.com/Binbin-miao/yunji-win/issues) 提交设备信息协助适配，或参考[设备适配指南](docs/设备适配.md)自行添加。
+
+**Q：为什么加一个新设备不用改代码？**
+因为协议选择只由 **VID（厂商号）** 决定，与 PID（产品号）无关 —— 可自行验证：
+`grep -rn "pid" app/yunji/devices/ttgk.py app/yunji/devices/xuanrun.py` 无任何输出。
+PID 仅用于在产品表里查显示名与图标。所以同厂商的新型号通常只需追加一条产品表记录。
 
 **Q：怎么把 AutoEQ 的调音曲线导入进来？**
 在 ProEQ 页点「导入」，把从 AutoEQ / squig.link 复制的内容粘进去即可。支持 Equalizer APO（`Filter 1: ON PK Fc ...`）、GraphicEQ（`GraphicEQ: 20 -3.5; ...`）、Wavelet JSON 以及本工具格式。若源配置超过 8 段，会自动拟合为设备的 8 段并显示拟合误差。

@@ -26,9 +26,7 @@
           "icon": "ic_dev_default",
           "infoPath": "",
           "isValid": true,
-          "additionalInfo": [
-            1234
-          ]
+          "additionalInfo": []
         }
       ]
     },
@@ -49,6 +47,16 @@
         {
           "id": 17388,
           "name": "凌云剑",
+          "icon": "ic_dev_default",
+          "infoPath": "",
+          "isValid": true,
+          "additionalInfo": [
+            "cb5100"
+          ]
+        },
+        {
+          "id": 17169,
+          "name": "青云剑",
           "icon": "ic_dev_default",
           "infoPath": "",
           "isValid": true,
