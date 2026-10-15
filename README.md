@@ -139,6 +139,15 @@ pyinstaller --noconfirm --windowed \
 ## 📚 技术文档
 
 - [硬件通信与 DSP 协议规范](docs/协议参考.md)：包含 TTGK 64 字节 HID 报文定义、旋润 7 字节控制传输协议、8 段 Biquad EQ 定点系数计算公式。
+- [设备适配指南](docs/设备适配.md)：设备不被识别时如何查 VID/PID、如何通过资源覆盖添加新设备、什么情况需要逆向协议。
+
+## 🧰 附带工具
+
+```bash
+python tools/list_usb_devices.py    # 列出所有 USB/HID 设备，标注是否已支持
+```
+
+当你手上有设备但软件里不显示时，用它查出 VID/PID，再按[设备适配指南](docs/设备适配.md)加进产品表。
 
 ---
 
