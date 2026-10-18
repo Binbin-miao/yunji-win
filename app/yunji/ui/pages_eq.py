@@ -568,7 +568,11 @@ class ProEqPage(QWidget):
             show_toast(self, S["preamp_applied"] % (target, peak))
 
         self.data.offset = int(target)
-        self._after_change()
+        # 弹窗期间设备可能被拔出，页面已被销毁 —— 此时不应再刷新界面
+        try:
+            self._after_change()
+        except RuntimeError:
+            log.warning("页面已销毁，跳过增益补偿后的界面刷新")
 
     # ---------------- 滤波器类型（实验性）----------------
     def _enable_shelf(self):

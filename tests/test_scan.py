@@ -520,6 +520,111 @@ class TestControlRetry(unittest.TestCase):
         self.assertEqual(dev.write_calls, 1)
 
 
+class _StepDev:
+    """可分别控制「写」「读」行为的伪造设备"""
+
+    def __init__(self, write_err=None, read_err=None, payload=None):
+        self.write_err = write_err
+        self.read_err = read_err
+        self.payload = payload or bytes(7)
+        self.writes = 0
+        self.reads = 0
+
+    def ctrl_transfer(self, bm, req, val, idx, data, timeout=0):
+        if bm == 0x43:
+            self.writes += 1
+            if self.write_err:
+                raise self.write_err
+            return len(data)
+        self.reads += 1
+        if self.read_err:
+            raise self.read_err
+        return self.payload
+
+
+class TestControlStepLabel(unittest.TestCase):
+    """错误信息必须能区分「写」还是「读」阶段失败
+
+    这是判断根因的关键：写阶段就失败 = 设备在收到命令前已消失（供电/链路）；
+    写成功但读失败 = 设备收到命令后才断开（固件重置 / 隔离器下游掉电）。
+    """
+
+    def _run(self, dev):
+        from yunji.usb.usb_backend import UsbBackend
+        b = UsbBackend(dev)
+        b._device = dev
+        return b
+
+    def test_write_failure_reports_write(self):
+        b = self._run(_StepDev(write_err=_usb_err(-12, "Operation not supported")))
+        with self.assertRaises(TransportError) as ctx:
+            b.control_in(b"\x00" * 7)
+        self.assertIn("控制传输写失败", str(ctx.exception))
+
+    def test_read_failure_reports_read(self):
+        b = self._run(_StepDev(read_err=_usb_err(-12, "Operation not supported")))
+        with self.assertRaises(TransportError) as ctx:
+            b.control_in(b"\x00" * 7)
+        self.assertIn("控制传输读失败", str(ctx.exception))
+
+    def test_read_stale_after_write_success(self):
+        """写成功、读 stale —— 隔离器场景下最需要区分的形态"""
+        b = self._run(_StepDev(read_err=_usb_err(-4, "No such device")))
+        with mock.patch.object(type(b), "recover", return_value=False):
+            with self.assertRaises(TransportError) as ctx:
+                b.control_in(b"\x00" * 7)
+        msg = str(ctx.exception)
+        self.assertIn("控制传输读失败", msg)
+        self.assertIn("隔离器", msg)
+
+
+class _CfgDev:
+    """伪造设备：记录 set_configuration 调用次数"""
+
+    def __init__(self, active_ok=True):
+        self.active_ok = active_ok
+        self.set_config_calls = 0
+        self.get_config_calls = 0
+        self.idVendor = 12230
+        self.idProduct = 61692
+
+    def is_kernel_driver_active(self, n):
+        return False
+
+    def get_active_configuration(self):
+        self.get_config_calls += 1
+        if not self.active_ok:
+            raise RuntimeError("not configured")
+        return object()
+
+    def set_configuration(self):
+        self.set_config_calls += 1
+        if not self.active_ok:
+            raise RuntimeError("still failing")
+
+
+class TestOpenDoesNotDisturb(unittest.TestCase):
+    """旋润路径不应重复 set_configuration（复合设备上会触发重置）"""
+
+    def test_control_only_skips_set_configuration(self):
+        from yunji.usb.usb_backend import UsbBackend
+        dev = _CfgDev(active_ok=True)
+        b = UsbBackend(dev)
+        b._device = dev
+        b.open(need_ttgk_endpoints=False)
+        self.assertEqual(dev.set_config_calls, 0,
+                         "设备已配置时不应再调用 set_configuration")
+        self.assertEqual(dev.get_config_calls, 1)
+
+    def test_falls_back_when_not_configured(self):
+        from yunji.usb.usb_backend import UsbBackend
+        dev = _CfgDev(active_ok=False)
+        b = UsbBackend(dev)
+        b._device = dev
+        b.open(need_ttgk_endpoints=False)   # 不应抛异常
+        self.assertEqual(dev.set_config_calls, 1, "未配置时应主动配置一次")
+
+
 # ============================================================ 存储
 class TestJsonStore(unittest.TestCase):
     def test_atomic_write_and_reload(self):

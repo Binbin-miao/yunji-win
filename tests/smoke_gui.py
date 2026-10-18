@@ -178,15 +178,34 @@ def test_bypass():
 
 
 def test_preamp():
-    print(">> auto preamp")
+    """可完全补偿的情况：不应弹窗，直接设置偏移"""
+    print(">> auto preamp（可补偿）")
     p = state["proeq"]
-    p.data.gain_list = [6.0] * 8
+    p.data.gain_list = [0.0] * 8
+    p.data.gain_list[4] = 6.0          # 单段 +6dB，峰值约 6dB，在 offset 下限之内
     p.refresh_display()
     peak = p.data.peak_gain_db()
-    assert peak > 0, f"峰值增益异常: {peak}"
+    assert 5.0 < peak <= 6.1, f"峰值异常: {peak}"
     p._auto_preamp()
-    assert p.data.offset < 0, f"未设置负偏移: {p.data.offset}"
+    assert p.data.offset == -6, f"应设为 -6，实际 {p.data.offset}"
     print(f"   峰值 {peak:+.1f} dB → offset {p.data.offset} dB")
+
+
+def test_preamp_clamped():
+    """超出 offset 下限：应弹提示并钳制到下限（对话框打桩，避免阻塞）"""
+    print(">> auto preamp（超下限钳制）")
+    from unittest import mock
+    from yunji.ui import dialogs
+
+    p = state["proeq"]
+    p.data.gain_list = [12.0] * 8
+    p.refresh_display()
+    peak = p.data.peak_gain_db()
+    assert peak > 8.0, f"峰值应超过 offset 下限，实际 {peak}"
+    with mock.patch.object(dialogs.ContentDialog, "exec", return_value=0):
+        p._auto_preamp()
+    assert p.data.offset == -8, f"应钳制到 -8，实际 {p.data.offset}"
+    print(f"   峰值 {peak:+.1f} dB → offset {p.data.offset} dB（已钳制）")
 
 
 def test_import_apo():
@@ -322,6 +341,43 @@ def open_ezeq():
     p._after_change()
 
 
+def test_hotplug_confirm():
+    """热插拔必须连续多次未见才判定断开，避免枚举抖动误杀会话"""
+    print(">> hotplug 确认机制")
+    from yunji.ui.main_window import DeviceSession
+    from yunji.usb.base import DeviceEntry
+    from yunji.usb.simulator import SimulatedTransport
+
+    entry = DeviceEntry(vid=13058, pid=17388, name="测试设备",
+                        icon="ic_dev_default", valid=True, connected=True,
+                        additional_info=["cb5100"], is_sim=False)
+    fake = DeviceSession(entry, SimulatedTransport(brand="ttgk", chip_type="cb5100"))
+
+    saved_session = win.session
+    saved_close = win._close_session
+    closed = []
+    win.session = fake
+    win._close_session = lambda: closed.append(1)
+    try:
+        win._check_hotplug([])
+        win._check_hotplug([])
+        assert not closed, f"前 2 次不应判定断开（实际 {len(closed)} 次）"
+        win._check_hotplug([])
+        assert len(closed) == 1, f"第 3 次应判定断开（实际 {len(closed)} 次）"
+        win._check_hotplug([])
+        assert len(closed) == 1, "计数重置后不应立刻再次断开"
+        # 设备重新出现后计数应清零
+        win._check_hotplug([])
+        win._check_hotplug([entry])
+        win._check_hotplug([])
+        assert len(closed) == 1, "设备出现后计数应清零"
+        print("   连续 3 次未见才断开，计数重置正确")
+    finally:
+        win._close_session = saved_close
+        win.session = saved_session
+        fake.close()
+
+
 def open_about():
     print(">> about page")
     win.show_about()
@@ -364,6 +420,7 @@ steps = [
     (3000, open_proeq),
     (3300, test_bypass),
     (3600, test_preamp),
+    (3850, test_preamp_clamped),
     (3900, test_import_apo),
     (4200, test_import_graphic),
     (4500, test_import_wavelet),
@@ -374,6 +431,7 @@ steps = [
     (6000, test_curve_hover),
     (6300, test_share_card),
     (6700, open_ezeq),
+    (7100, test_hotplug_confirm),
     (7200, open_about),
     (7700, finish),
 ]

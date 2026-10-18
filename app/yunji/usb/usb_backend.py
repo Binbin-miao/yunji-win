@@ -41,6 +41,7 @@ CONTROL_TIMEOUT_MS = 1000      # 单次传输超时
 CONTROL_RETRIES = 3            # 总尝试次数
 WRITE_READ_GAP = 0.005         # 写入到读取之间的基准间隔（秒）
 RETRY_BACKOFF = 0.05           # 重试退避基数（秒）
+RECOVER_SETTLE = 0.15          # 重新枚举后等待设备就绪（秒）
 
 # libusb errno 常量（部分环境不暴露，直接写数值）
 ERR_IO = -1
@@ -156,14 +157,26 @@ class UsbBackend(BaseTransport):
                     dev.detach_kernel_driver(0)
             except Exception:
                 pass
-            try:
-                dev.set_configuration()
-            except Exception as e:  # noqa: BLE001
-                # 不能直接忽略：驱动未绑定时这里就会失败，而后续控制传输
-                # 也会失败。记录下来便于诊断「列表已连接但读取失败」的问题。
-                log.warning("set_configuration 失败（可能驱动未绑定，继续尝试）: %s", e)
+
             if need_ttgk_endpoints:
+                # TTGK 走端点读写，必须确保配置已生效
+                try:
+                    dev.set_configuration()
+                except Exception as e:  # noqa: BLE001
+                    log.warning("set_configuration 失败（可能驱动未绑定，继续尝试）: %s", e)
                 self._find_endpoints()
+            else:
+                # 旋润只做控制传输：设备已由系统配置好。
+                # 重复调用 set_configuration() 在复合设备（音频接口由 usbaudio 占用）
+                # 上可能被拒绝甚至触发设备重置，进而导致后续传输报 NO_DEVICE。
+                try:
+                    dev.get_active_configuration()
+                except Exception:
+                    try:
+                        dev.set_configuration()
+                        log.info("设备未配置，已主动 set_configuration")
+                    except Exception as e:  # noqa: BLE001
+                        log.warning("set_configuration 失败（继续尝试控制传输）: %s", e)
         except usb.core.USBError as e:  # type: ignore
             raise TransportError(self._friendly_error(e)) from e
         return self
@@ -261,11 +274,16 @@ class UsbBackend(BaseTransport):
             return False
 
         for dev in found:
+            # 刚重新枚举的设备需要一点时间完成配置；立即传输容易再次失败
             try:
-                dev.set_configuration()
+                dev.get_active_configuration()
             except Exception:
-                pass  # 已被系统配置亦可继续
+                try:
+                    dev.set_configuration()
+                except Exception as e:  # noqa: BLE001
+                    log.debug("恢复后 set_configuration 失败（继续）: %s", e)
             self._device = dev
+            time.sleep(RECOVER_SETTLE)
             log.info("已重新获取设备句柄: %04X:%04X", vid, pid)
             return True
 
@@ -279,47 +297,68 @@ class UsbBackend(BaseTransport):
         - timeout / io：可重试，退避后继续
         - stale（设备重新枚举）：自动重新获取句柄后重试一次
         - unsupported：驱动问题，重试无意义，直接失败
-        """
-        last = None
-        recovered = False
-        attempt = 0
 
-        while attempt < CONTROL_RETRIES:
+        错误信息会标注是「写」还是「读」阶段失败：
+        写阶段就失败说明设备在收到命令前已消失（供电/链路）；
+        写成功但读失败说明设备收到命令后才断开（设备自身重置或固件问题）。
+        """
+        state = {"last": None, "step": "写", "recovered": False, "attempt": 0}
+
+        def handle(e, step: str) -> bool:
+            """返回 True 表示应继续重试"""
+            state["last"] = e
+            state["step"] = step
+            kind, _msg = classify_usb_error(e)
+
+            if kind == "stale" and not state["recovered"]:
+                state["recovered"] = True
+                log.warning("设备句柄失效（%s阶段），尝试自动恢复…", step)
+                if self.recover():
+                    return True
+                return False
+
+            if kind in _FATAL_KINDS:
+                return False
+
+            state["attempt"] += 1
+            log.warning("控制传输%s失败 第 %d/%d 次 [%s]: %s",
+                        step, state["attempt"], CONTROL_RETRIES, kind, e)
+            if state["attempt"] >= CONTROL_RETRIES:
+                return False
+            time.sleep(RETRY_BACKOFF * state["attempt"])
+            return True
+
+        while state["attempt"] < CONTROL_RETRIES:
+            # 1) 写命令
             try:
                 self._device.ctrl_transfer(
                     0x43, 0xA0, 0, 0x09A0, bytes(data), timeout=CONTROL_TIMEOUT_MS
                 )
-                if direction == "out":
-                    return None
+            except usb.core.USBError as e:  # type: ignore
+                if handle(e, "写"):
+                    continue
+                break
+
+            if direction == "out":
+                return None
+
+            # 2) 读响应
+            try:
                 # 隔离器会增加链路延迟，重试时逐步放宽等待
-                time.sleep(WRITE_READ_GAP * (attempt + 1))
+                time.sleep(WRITE_READ_GAP * (state["attempt"] + 1))
                 resp = self._device.ctrl_transfer(
                     0xC3, 0xA1, 0, 0x09A0, 7, timeout=CONTROL_TIMEOUT_MS
                 )
                 return bytes(resp)
             except usb.core.USBError as e:  # type: ignore
-                last = e
-                kind, _msg = classify_usb_error(e)
+                if handle(e, "读"):
+                    continue
+                break
 
-                if kind == "stale" and not recovered:
-                    recovered = True
-                    log.warning("设备句柄失效（可能被重新枚举），尝试自动恢复…")
-                    if self.recover():
-                        continue          # 恢复成功：不消耗重试次数
-                    break
-
-                if kind in _FATAL_KINDS:
-                    break
-
-                attempt += 1
-                log.warning("控制传输(%s)失败 第 %d/%d 次 [%s]: %s",
-                            direction, attempt, CONTROL_RETRIES, kind, e)
-                if attempt < CONTROL_RETRIES:
-                    time.sleep(RETRY_BACKOFF * attempt)
-
-        kind, msg = classify_usb_error(last) if last is not None else ("other", "未知错误")
-        log.error("控制传输(%s)最终失败 [%s]: %s", direction, kind, last)
-        raise TransportError(f"控制传输({direction})失败：{msg}") from last
+        kind, msg = (classify_usb_error(state["last"]) if state["last"] is not None
+                     else ("other", "未知错误"))
+        log.error("控制传输%s最终失败 [%s]: %s", state["step"], kind, state["last"])
+        raise TransportError(f"控制传输{state['step']}失败：{msg}") from state["last"]
 
     def control_out(self, data: bytes) -> int:
         self._control_loop("out", data)
