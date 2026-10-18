@@ -2,6 +2,7 @@
 """设备相关页面：设备列表 / 旋润设置页 / TTGK 设置页 / 滤波器页"""
 from __future__ import annotations
 
+import logging
 from typing import Optional
 
 from PySide6.QtCore import Qt, QTimer
@@ -33,6 +34,8 @@ from ..usb.scanner import brand_of
 from .common import Toolbar, device_icon_pixmap, load_pixmap, setting_icon
 from .theme import C_SECONDARY_BG
 from .widgets import card_frame, make_divider, make_row, show_toast
+
+log = logging.getLogger(__name__)
 
 
 # ============================================================ 设备列表
@@ -419,7 +422,21 @@ class XuanRunPage(QWidget):
         self.conn_label.setObjectName("statusLinked")
         nl.addWidget(self.conn_label)
         cl.addLayout(nl, 1)
+        self.retry_btn = QPushButton("重试连接")
+        self.retry_btn.setFixedWidth(84)
+        self.retry_btn.setVisible(False)
+        self.retry_btn.clicked.connect(self._retry_load)
+        cl.addWidget(self.retry_btn)
         v.addWidget(card)
+
+        # 错误详情（默认隐藏）：显示真实失败原因，便于定位
+        self.err_label = QLabel("")
+        self.err_label.setWordWrap(True)
+        self.err_label.setStyleSheet(
+            "background:#fff5f5; color:#c53030; font-size:12px;"
+            "padding:8px 10px; border-radius:4px;")
+        self.err_label.setVisible(False)
+        v.addWidget(self.err_label)
 
         # 音量
         card2 = card_frame()
@@ -485,6 +502,12 @@ class XuanRunPage(QWidget):
 
     def _apply(self, d):
         self._sync_enabled(True)
+        # 读取成功后清除错误状态
+        self.err_label.setVisible(False)
+        self.retry_btn.setVisible(False)
+        self.conn_label.setText(S["device_status_connected"])
+        self.conn_label.setObjectName("statusLinked")
+        self.conn_label.setStyleSheet("")
         self.firm_value.setText("Rev. " + str(d["firm"]))
         self.vol_now = d["vol"]
         self.vol_row.set_value(d["vol"])
@@ -516,11 +539,44 @@ class XuanRunPage(QWidget):
         })
 
     def _load_err(self, msg):
+        """读取失败：显示真实原因并提供重试入口
+
+        旧实现只弹一句「获取设备信息失败」并把 msg 丢掉，导致
+        「列表显示已连接、点进去失败」这类问题完全无法定位。
+        """
+        log.warning("旋润设备读取失败: %s", msg)
         show_toast(self, S["toast_empty_device"])
         self.conn_label.setText(S["device_status_unconnected"])
         self.conn_label.setObjectName("statusUnlink")
         self.conn_label.setStyleSheet("color:#333;")
+        self.err_label.setText(str(msg) or S["toast_empty_device"])
+        self.err_label.setVisible(True)
+        self.retry_btn.setVisible(True)
         self._sync_enabled(False)
+
+    def _retry_load(self):
+        """重试：先尝试恢复失效句柄（隔离器重新枚举场景），再重新读取"""
+        self.retry_btn.setVisible(False)
+        self.err_label.setText("正在重新连接设备…")
+        self.err_label.setVisible(True)
+
+        transport = getattr(self.session, "transport", None)
+        if transport is None:
+            self._load_err("会话已失效，请返回设备列表重新连接。")
+            return
+
+        def op():
+            return bool(transport.recover())
+
+        def ok(recovered):
+            if not recovered:
+                self._load_err(
+                    "无法恢复设备连接：设备可能已断开。\n"
+                    "请重新插拔设备后，返回设备列表重新连接。")
+                return
+            self.load()
+
+        self.ctrl.run_async(op, ok, lambda m: self._load_err(m))
 
     def _sync_enabled(self, on: bool):
         for w in (self.vol_row, self.bal_row, self.gain_row, self.led_row,
@@ -607,7 +663,21 @@ class TtgkPage(QWidget):
         self.conn_label.setObjectName("statusLinked")
         nl.addWidget(self.conn_label)
         cl.addLayout(nl, 1)
+        self.retry_btn = QPushButton("重试连接")
+        self.retry_btn.setFixedWidth(84)
+        self.retry_btn.setVisible(False)
+        self.retry_btn.clicked.connect(self._retry_load)
+        cl.addWidget(self.retry_btn)
         v.addWidget(card)
+
+        # 错误详情（默认隐藏）：显示真实失败原因，便于定位
+        self.err_label = QLabel("")
+        self.err_label.setWordWrap(True)
+        self.err_label.setStyleSheet(
+            "background:#fff5f5; color:#c53030; font-size:12px;"
+            "padding:8px 10px; border-radius:4px;")
+        self.err_label.setVisible(False)
+        v.addWidget(self.err_label)
 
         # 音量 + 麦克风 + （cb5100: 平衡/增益/LED）
         card2 = card_frame()
@@ -692,6 +762,12 @@ class TtgkPage(QWidget):
 
     def _apply(self, d):
         self._sync_enabled(True)
+        # 读取成功后清除错误状态
+        self.err_label.setVisible(False)
+        self.retry_btn.setVisible(False)
+        self.conn_label.setText(S["device_status_connected"])
+        self.conn_label.setObjectName("statusLinked")
+        self.conn_label.setStyleSheet("")
         self.firm_value.setText(d["firm"] or "-")
         self.vol_row.set_value((d["vol"] - self.vol_min) // self.vol_res)
         self.mic_row.set_value(max(0, min(60, d["mic"] + 30)))
@@ -706,10 +782,40 @@ class TtgkPage(QWidget):
         self.ctrl.state.set_device_settings(self.entry.name, self.entry.pid, cfg)
 
     def _load_err(self, msg):
+        """读取失败：显示真实原因并提供重试入口"""
+        log.warning("TTGK 设备读取失败: %s", msg)
         show_toast(self, S["toast_empty_device"])
         self.conn_label.setText(S["device_status_unconnected"])
+        self.conn_label.setObjectName("statusUnlink")
         self.conn_label.setStyleSheet("color:#333;")
+        self.err_label.setText(str(msg) or S["toast_empty_device"])
+        self.err_label.setVisible(True)
+        self.retry_btn.setVisible(True)
         self._sync_enabled(False)
+
+    def _retry_load(self):
+        """重试：先尝试恢复失效句柄（设备重新枚举场景），再重新读取"""
+        self.retry_btn.setVisible(False)
+        self.err_label.setText("正在重新连接设备…")
+        self.err_label.setVisible(True)
+
+        transport = getattr(self.session, "transport", None)
+        if transport is None:
+            self._load_err("会话已失效，请返回设备列表重新连接。")
+            return
+
+        def op():
+            return bool(transport.recover())
+
+        def ok(recovered):
+            if not recovered:
+                self._load_err(
+                    "无法恢复设备连接：设备可能已断开。\n"
+                    "请重新插拔设备后，返回设备列表重新连接。")
+                return
+            self.load()
+
+        self.ctrl.run_async(op, ok, lambda m: self._load_err(m))
 
     def _sync_enabled(self, on: bool):
         ws = [self.vol_row, self.mic_row, self.btn_filter, self.btn_ezeq, self.btn_proeq]

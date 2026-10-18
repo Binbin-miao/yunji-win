@@ -18,6 +18,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import List, Optional
 
 from .base import BaseTransport, TransportError
@@ -32,6 +33,23 @@ except Exception:  # pragma: no cover
 log = logging.getLogger(__name__)
 
 CMD_FIRMWARE = 0x0C
+
+#: Windows HID 路径形如 \\?\hid#vid_32d2&pid_43dc#...，用于恢复时重新定位
+_VIDPID_RE = re.compile(r"vid_([0-9a-f]{4}).*?pid_([0-9a-f]{4})", re.IGNORECASE)
+
+
+def _parse_vid_pid(path):
+    """从 HID 设备路径解析 VID/PID（解析失败返回 (None, None)）"""
+    if not path:
+        return None, None
+    try:
+        text = path.decode("utf-8", "ignore") if isinstance(path, bytes) else str(path)
+    except Exception:
+        return None, None
+    m = _VIDPID_RE.search(text)
+    if not m:
+        return None, None
+    return int(m.group(1), 16), int(m.group(2), 16)
 
 
 def hid_available() -> bool:
@@ -91,6 +109,32 @@ class HidBackend(BaseTransport):
             except Exception:
                 pass
             self._dev = None
+
+    def recover(self) -> bool:
+        """重新打开设备；路径失效时按 VID/PID 重新枚举"""
+        if not _HID_OK or self._dev is None and self._path is None:
+            return False
+        self.close()
+        try:
+            self.open()
+            log.info("HID 句柄已重新打开")
+            return True
+        except Exception:
+            log.warning("按原路径重开失败，尝试重新枚举", exc_info=True)
+
+        vid, pid = _parse_vid_pid(self._path)
+        if vid is None:
+            return False
+        for d in enumerate_hid(vid, pid):
+            try:
+                self._path = d["path"]
+                self.open()
+                log.info("HID 句柄已通过重新枚举恢复: %04X:%04X", vid, pid)
+                return True
+            except Exception:
+                continue
+        log.warning("HID 恢复失败: %04X:%04X", vid, pid)
+        return False
 
     # ---------------- 报告布局探测 ----------------
     def _probe_report_layout(self):

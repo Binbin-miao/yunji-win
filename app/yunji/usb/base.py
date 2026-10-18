@@ -47,6 +47,14 @@ class BaseTransport:
     def hid_read(self, size: int = 64, timeout_ms: int = 1000) -> bytes:
         raise TransportError("当前传输后端不支持中断端点读")
 
+    def recover(self) -> bool:
+        """尝试恢复失效的连接（重新枚举 / 重新打开）
+
+        典型场景：USB 隔离器供电波动导致设备重新枚举，原句柄失效。
+        默认不支持恢复；具体后端可按自身能力实现。
+        """
+        return False
+
     def describe(self) -> str:
         return self.kind
 

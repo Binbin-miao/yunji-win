@@ -74,6 +74,31 @@ def open_sim_xr():
     assert type(win.pages[-1]).__name__ == "XuanRunPage", type(win.pages[-1]).__name__
 
 
+def test_xr_load_error():
+    """模拟读取失败：应显示真实原因并出现「重试连接」按钮"""
+    print(">> xuanrun load error UI")
+    pg = win.pages[-1]
+    assert type(pg).__name__ == "XuanRunPage"
+    # 先确认正常状态下错误区是隐藏的
+    assert not pg.err_label.isVisible(), "正常状态不应显示错误区"
+    assert not pg.retry_btn.isVisible(), "正常状态不应显示重试按钮"
+
+    fake = "控制传输(读)失败：设备句柄已失效（设备可能被重新枚举）。"
+    pg._load_err(fake)
+
+    assert pg.err_label.isVisible(), "失败后应显示错误详情"
+    assert fake in pg.err_label.text(), f"未显示真实原因: {pg.err_label.text()!r}"
+    assert pg.retry_btn.isVisible(), "失败后应出现重试按钮"
+    assert pg.conn_label.text() == "未连接", pg.conn_label.text()
+
+    # 恢复成功后应清除错误状态
+    pg._apply({"firm": "8", "vol": 20, "l": 0, "r": 0,
+               "filter": 0, "elevel": 0, "led": 0, "depop": 0})
+    assert not pg.err_label.isVisible(), "恢复后错误区应隐藏"
+    assert not pg.retry_btn.isVisible(), "恢复后重试按钮应隐藏"
+    print("   错误提示 / 重试按钮 显隐正确")
+
+
 def open_xr_filter():
     print(">> filter page")
     win.open_filter_page(win.session)
@@ -107,6 +132,24 @@ def open_sim_tk():
              if e.vid == 13058 and e.chip_type == "cb5100"][0]
     win.open_device(entry)
     assert type(win.pages[-1]).__name__ == "TtgkPage", type(win.pages[-1]).__name__
+
+
+def test_tk_load_error():
+    """TTGK 页面同样应显示真实原因与重试按钮"""
+    print(">> ttgk load error UI")
+    pg = win.pages[-1]
+    assert type(pg).__name__ == "TtgkPage"
+    assert not pg.err_label.isVisible(), "正常状态不应显示错误区"
+
+    pg._load_err("读取失败：设备未在超时时间内响应。")
+    assert pg.err_label.isVisible(), "失败后应显示错误详情"
+    assert "超时" in pg.err_label.text(), pg.err_label.text()
+    assert pg.retry_btn.isVisible(), "失败后应出现重试按钮"
+
+    pg._apply({"firm": "0.8", "vol": 40, "mic": 0, "bal": 0, "gain": 0, "led": 0})
+    assert not pg.err_label.isVisible(), "恢复后错误区应隐藏"
+    assert not pg.retry_btn.isVisible(), "恢复后重试按钮应隐藏"
+    print("   TTGK 错误提示显隐正确")
 
 
 def open_tk_filter():
@@ -310,11 +353,13 @@ def finish():
 
 steps = [
     (400, open_sim_xr),
+    (700, test_xr_load_error),
     (900, open_xr_filter),
     (1300, back2),
     (1600, check_list_incremental),
     (2000, test_scan_service),
     (2300, open_sim_tk),
+    (2600, test_tk_load_error),
     (2700, open_tk_filter),
     (3000, open_proeq),
     (3300, test_bypass),
