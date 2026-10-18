@@ -360,6 +360,166 @@ class TestHidReportParser(unittest.TestCase):
         self.assertEqual(parse_output_reports(desc), [(0, 16)])
 
 
+# ============================================================ USB 错误分类
+class _UsbErr(Exception):
+    """模拟 libusb 的 USBError（带 errno）"""
+
+    def __init__(self, errno, msg):
+        super().__init__(msg)
+        self.errno = errno
+
+
+class TestUsbErrorClassify(unittest.TestCase):
+    """控制传输错误分类（隔离器场景的可诊断性基础）"""
+
+    def test_no_device_is_stale(self):
+        from yunji.usb.usb_backend import classify_usb_error
+        kind, msg = classify_usb_error(_UsbErr(-4, "No such device"))
+        self.assertEqual(kind, "stale")
+        self.assertIn("隔离器", msg)
+
+    def test_not_supported(self):
+        from yunji.usb.usb_backend import classify_usb_error
+        kind, msg = classify_usb_error(_UsbErr(-12, "Operation not supported"))
+        self.assertEqual(kind, "unsupported")
+        self.assertIn("WinUSB", msg)
+
+    def test_pipe_error(self):
+        from yunji.usb.usb_backend import classify_usb_error
+        kind, _ = classify_usb_error(_UsbErr(-9, "Pipe error"))
+        self.assertEqual(kind, "unsupported")
+
+    def test_timeout(self):
+        from yunji.usb.usb_backend import classify_usb_error
+        kind, msg = classify_usb_error(_UsbErr(-7, "Operation timed out"))
+        self.assertEqual(kind, "timeout")
+        self.assertIn("延迟", msg)
+
+    def test_io_error(self):
+        from yunji.usb.usb_backend import classify_usb_error
+        kind, _ = classify_usb_error(_UsbErr(-1, "Input/output error"))
+        self.assertEqual(kind, "io")
+
+    def test_unknown_falls_back(self):
+        from yunji.usb.usb_backend import classify_usb_error
+        kind, msg = classify_usb_error(RuntimeError("something weird"))
+        self.assertEqual(kind, "other")
+        self.assertIn("something weird", msg)
+
+    def test_fatal_kinds_are_declared(self):
+        """stale / unsupported 必须归为「重试无意义」，否则会白等 3 次超时"""
+        from yunji.usb.usb_backend import _FATAL_KINDS
+        self.assertIn("stale", _FATAL_KINDS)
+        self.assertIn("unsupported", _FATAL_KINDS)
+        self.assertNotIn("timeout", _FATAL_KINDS)
+        self.assertNotIn("io", _FATAL_KINDS)
+
+    def test_base_transport_recover_default_false(self):
+        from yunji.usb.base import BaseTransport
+        self.assertFalse(BaseTransport().recover())
+
+
+class TestHidPathParse(unittest.TestCase):
+    """HID 恢复时从设备路径解析 VID/PID"""
+
+    def test_parse_windows_path(self):
+        from yunji.usb.hid_backend import _parse_vid_pid
+        p = rb"\\?\hid#vid_32d2&pid_43dc#7&1a2b3c4d&0&0000#{4d1e55b2-f16f-11cf-88cb-001111000030}"
+        self.assertEqual(_parse_vid_pid(p), (0x32D2, 0x43DC))
+
+    def test_parse_str_path(self):
+        """真实设备路径中的 VID/PID 是十六进制（13058=0x3302, 17388=0x43EC）"""
+        from yunji.usb.hid_backend import _parse_vid_pid
+        self.assertEqual(_parse_vid_pid("hid#vid_3302&pid_43ec"), (13058, 17388))
+
+    def test_parse_invalid(self):
+        from yunji.usb.hid_backend import _parse_vid_pid
+        self.assertEqual(_parse_vid_pid(""), (None, None))
+        self.assertEqual(_parse_vid_pid("no ids here"), (None, None))
+        self.assertEqual(_parse_vid_pid(None), (None, None))
+
+
+class _FakeCtrlDev:
+    """模拟 pyusb 设备：按脚本返回读结果或抛错"""
+
+    def __init__(self, reads):
+        self.reads = list(reads)
+        self.write_calls = 0
+        self.read_calls = 0
+
+    def ctrl_transfer(self, bm, req, val, idx, data, timeout=0):
+        if bm == 0x43:                     # 写
+            self.write_calls += 1
+            return len(data)
+        self.read_calls += 1               # 读
+        item = self.reads.pop(0) if self.reads else bytes(7)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+def _usb_err(errno, msg):
+    import usb.core
+    return usb.core.USBError(msg, errno=errno)
+
+
+class TestControlRetry(unittest.TestCase):
+    """控制传输重试与自动恢复（USB 隔离器场景的核心逻辑）"""
+
+    def _backend(self, reads):
+        from yunji.usb.usb_backend import UsbBackend
+        dev = _FakeCtrlDev(reads)
+        b = UsbBackend(dev)
+        b._device = dev
+        return b, dev
+
+    def test_success_first_try(self):
+        payload = bytes([0xC1, 0xA6, 0xA0, 0x08, 0, 0, 0])
+        b, dev = self._backend([payload])
+        self.assertEqual(b.control_in(b"\x00" * 7), payload)
+        self.assertEqual(dev.read_calls, 1)
+
+    def test_timeout_then_success(self):
+        payload = bytes([0xC1, 0xA6, 0xA3, 1, 2, 3, 0])
+        b, dev = self._backend([_usb_err(-7, "Operation timed out"), payload])
+        self.assertEqual(b.control_in(b"\x00" * 7), payload)
+        self.assertEqual(dev.read_calls, 2, "超时后应重试一次")
+
+    def test_stale_triggers_auto_recover(self):
+        """句柄失效应自动重新枚举并重试，而不是直接失败"""
+        payload = bytes([0xC1, 0xA6, 0xA0, 0x08, 0, 0, 0])
+        b, dev = self._backend([_usb_err(-4, "No such device"), payload])
+        with mock.patch.object(type(b), "recover", return_value=True) as m:
+            self.assertEqual(b.control_in(b"\x00" * 7), payload)
+            self.assertEqual(m.call_count, 1, "应尝试恢复一次")
+
+    def test_stale_recover_failure_raises(self):
+        b, dev = self._backend([_usb_err(-4, "No such device")])
+        with mock.patch.object(type(b), "recover", return_value=False):
+            with self.assertRaises(TransportError) as ctx:
+                b.control_in(b"\x00" * 7)
+        self.assertIn("隔离器", str(ctx.exception))
+
+    def test_unsupported_does_not_retry(self):
+        """驱动未绑定类错误重试无意义，应立刻失败"""
+        b, dev = self._backend([_usb_err(-12, "Operation not supported")])
+        with self.assertRaises(TransportError) as ctx:
+            b.control_in(b"\x00" * 7)
+        self.assertEqual(dev.read_calls, 1, "不应重试")
+        self.assertIn("WinUSB", str(ctx.exception))
+
+    def test_all_timeouts_raises(self):
+        b, dev = self._backend([_usb_err(-7, "timeout")] * 5)
+        with self.assertRaises(TransportError):
+            b.control_in(b"\x00" * 7)
+        self.assertEqual(dev.read_calls, 3, "最多重试 3 次")
+
+    def test_control_out_returns_length(self):
+        b, dev = self._backend([])
+        self.assertEqual(b.control_out(b"\x00" * 7), 7)
+        self.assertEqual(dev.write_calls, 1)
+
+
 # ============================================================ 存储
 class TestJsonStore(unittest.TestCase):
     def test_atomic_write_and_reload(self):
