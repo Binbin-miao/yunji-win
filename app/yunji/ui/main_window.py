@@ -39,6 +39,14 @@ log = logging.getLogger(__name__)
 
 APP_STYLE_INIT = None
 
+#: 判定「设备已断开」需要连续多少次扫描都看不到设备
+#: 取 3 次（约 4.5s）以容忍 USB 枚举抖动，避免误销毁会话
+DISCONNECT_CONFIRM_SCANS = 3
+
+#: 扫描间隔：列表页 / 已打开设备页
+SCAN_INTERVAL_LIST = 1500
+SCAN_INTERVAL_SESSION = 5000
+
 
 class DeviceSession:
     """一次设备连接会话（传输层 + 协议对象 + 串行执行器）"""
@@ -86,6 +94,7 @@ class MainWindow(QMainWindow):
         self.pages: List[QWidget] = []
         self.session: Optional[DeviceSession] = None
         self._sim_session_seq = 0
+        self._miss_count = 0
 
         # 后台扫描服务（取代原先两个阻塞定时器）—— 需先于列表页创建
         self.scan_service = ScanService(parent=self)
@@ -172,6 +181,9 @@ class MainWindow(QMainWindow):
         self.runner.run(op, ok, err)
 
     def _open_brand_page(self, session: DeviceSession):
+        # 已进入设备页：放慢扫描，减少 USB 枚举对活跃会话的干扰
+        self._miss_count = 0
+        self.scan_service.set_interval(SCAN_INTERVAL_SESSION)
         if session.brand == "xuanrun":
             self._push(XuanRunPage(self, session))
         else:
@@ -226,25 +238,50 @@ class MainWindow(QMainWindow):
             self.pages[-1].show_scan_error(msg)
 
     def _check_hotplug(self, entries: List[DeviceEntry]):
+        """热插拔检测
+
+        重要：必须连续多次扫描都看不到设备才判定断开。
+        旧实现「一次没看到就销毁会话」会在 USB 枚举偶发抖动时（隔离器、集线器、
+        WinUSB 打开瞬间）误判为拔出，随即 dispose 句柄，导致正在进行的
+        控制传输报 LIBUSB_ERROR_NO_DEVICE —— 表现为「点进去就读取失败」。
+        """
         session = self.session
         if session is None or session.entry.is_sim:
+            self._miss_count = 0
             return
+
         still = any(e.connected and e.vid == session.entry.vid
                     and e.pid == session.entry.pid for e in entries)
-        if not still:
-            self._close_session()
-            while len(self.pages) > 1 and not isinstance(self.pages[-1], DeviceListPage):
-                page = self.pages.pop()
-                self.stack.removeWidget(page)
-                page.deleteLater()
-            self.stack.setCurrentWidget(self.list_page)
-            self.list_page.apply_entries(entries)
-            show_toast(self, "设备已断开")
+        if still:
+            self._miss_count = 0
+            return
+
+        self._miss_count += 1
+        if self._miss_count < DISCONNECT_CONFIRM_SCANS:
+            log.debug("扫描未发现设备（连续第 %d/%d 次），暂不判定断开",
+                      self._miss_count, DISCONNECT_CONFIRM_SCANS)
+            return
+
+        log.info("连续 %d 次扫描未发现设备，判定已断开", self._miss_count)
+        self._miss_count = 0
+        self._close_session()
+        while len(self.pages) > 1 and not isinstance(self.pages[-1], DeviceListPage):
+            page = self.pages.pop()
+            self.stack.removeWidget(page)
+            page.deleteLater()
+        self.stack.setCurrentWidget(self.list_page)
+        self.list_page.apply_entries(entries)
+        show_toast(self, "设备已断开")
 
     def _close_session(self):
         if self.session is not None:
             self.session.close()
             self.session = None
+        self._miss_count = 0
+        try:
+            self.scan_service.set_interval(SCAN_INTERVAL_LIST)
+        except Exception:
+            pass
 
     # ================= 生命周期 =================
     def changeEvent(self, event):  # noqa: N802

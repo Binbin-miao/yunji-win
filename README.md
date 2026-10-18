@@ -92,7 +92,7 @@
 
 ### 方式一：下载开箱即用的 Release 版本（推荐）
 
-前往 [GitHub Releases](https://github.com/Binbin-miao/yunji-win/releases) 页面，下载最新的 `YunjiSettings-v1.7.6.1-win64.zip`，解压后双击运行 `YunjiSettings.exe` 即可使用。
+前往 [GitHub Releases](https://github.com/Binbin-miao/yunji-win/releases) 页面，下载最新的 `YunjiSettings-v1.7.6.2-win64.zip`，解压后双击运行 `YunjiSettings.exe` 即可使用。
 
 > 版本号规则：主体版本对应官方安卓版版本；若仅有移植版自身修订，则追加 `.N`（如 `1.7.6.1`）。
 
@@ -216,6 +216,12 @@ python tools/probe_xuanrun.py --loop 10  # 连读 10 次测稳定性
 ```
 
 它会逐层报告：能否枚举 → 描述符是否正常 → 能否 set_configuration → 控制传输是否得到响应。
+
+**Q：换 USB 口 / 加转接头或 HUB，会不会因为设备 ID 变了而连不上？**
+不会。**VID/PID 写死在设备固件里，转接不会改写它**；变化的只是 Windows 的「设备实例路径」（端口链路哈希）。
+本软件只使用 VID/PID 匹配，且不持久化任何设备路径，所以换口、加 HUB、加隔离器都不影响识别 —— 这也是为什么经转接后列表仍显示「已连接」。
+
+唯一可能受影响的是 **WinUSB 驱动绑定**：若 Zadig 按「设备实例」绑定，换口后属于新实例，旧绑定可能不适用。但那种情况的报错是「不支持该操作」，不是「句柄已失效」。
 
 **Q：为什么加一个新设备不用改代码？**
 因为协议选择只由 **VID（厂商号）** 决定，与 PID（产品号）无关 —— 可自行验证：

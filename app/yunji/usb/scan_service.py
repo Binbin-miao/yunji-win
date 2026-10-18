@@ -98,6 +98,16 @@ class ScanService(QObject):
         self._timer.start()
         self.request()
 
+    def set_interval(self, ms: int) -> None:
+        """调整扫描间隔
+
+        已打开设备页时应放慢扫描：频繁的 USB 枚举会与活跃会话争用设备，
+        在部分设备/隔离器组合上会引发 LIBUSB_ERROR_NO_DEVICE。
+        """
+        if ms <= 0 or ms == self._timer.interval():
+            return
+        self._timer.setInterval(ms)
+
     def request(self) -> None:
         """请求一次扫描；若已有任务在跑则忽略，避免堆积"""
         if self._inflight:
