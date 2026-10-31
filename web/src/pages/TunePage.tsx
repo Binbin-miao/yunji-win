@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { COPY } from '../copy'
 import BandEditor from '../components/BandEditor'
 import ImportPanel from '../components/ImportPanel'
+import FilterPicker from '../components/FilterPicker'
 import EqChart from '../components/EqChart'
 import { TARGETS } from '../data/targets'
 import { DB_RANGES, type EqBand } from '../domain/eq'
@@ -315,24 +316,18 @@ export default function TunePage({
               )
             })}
 
-            <div className="param param-wide">
+            <div className="param param-full">
               <div className="param-top">
                 <span className="param-label">{COPY.param.filter.label}</span>
+                <span className="param-hint">{COPY.param.filter.hint}</span>
+                <div className="spacer" />
                 {statusNode('filter')}
               </div>
-              <div className="chips">
-                {COPY.filterModes.map((name, i) => (
-                  <button
-                    key={name}
-                    className={`chip ${state.filter === i ? 'on' : ''}`}
-                    aria-pressed={state.filter === i}
-                    onClick={() => apply('filter', i)}
-                  >
-                    {name}
-                  </button>
-                ))}
-              </div>
-              <span className="param-hint">{COPY.param.filter.hint}</span>
+              <FilterPicker
+                value={state.filter}
+                disabled={status.filter?.kind === 'writing'}
+                onChange={i => apply('filter', i)}
+              />
             </div>
 
             <div className="param">

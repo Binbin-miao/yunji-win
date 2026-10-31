@@ -184,7 +184,7 @@ export default function App() {
           const back = await t.setFilter(value)
           if (session !== sessionRef.current) return
           setState(s => (s ? { ...s, filter: back } : s))
-          finish(value, back, v => COPY.filterModes[v] ?? String(v))
+          finish(value, back, v => COPY.filters[v]?.name ?? String(v))
         } else {
           const back = await t.setGain(value)
           if (session !== sessionRef.current) return

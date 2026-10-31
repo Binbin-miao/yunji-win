@@ -942,3 +942,80 @@ button:focus:not(:focus-visible),
   color: var(--dim);
   line-height: 1.8;
 }
+
+/* ---------- 滤波模式卡片（频响示意图 + 适配建议） ---------- */
+.param-full {
+  grid-column: 1 / -1;
+}
+
+.filter-cards {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0 6px;
+}
+
+.filter-card {
+  flex: 0 1 8.6rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 9px 9px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(11, 8, 16, 0.5);
+  color: var(--dim);
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.filter-card:hover {
+  border-color: var(--line2);
+  background: rgba(161, 117, 240, 0.08);
+}
+
+.filter-card.on {
+  border-color: rgba(201, 166, 255, 0.6);
+  background: rgba(161, 117, 240, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(201, 166, 255, 0.25);
+}
+
+.filter-card:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.filter-thumb {
+  display: block;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: rgba(11, 8, 16, 0.55);
+}
+
+.filter-name {
+  font-size: 0.7813rem;
+  color: var(--ink);
+}
+
+.filter-card.on .filter-name {
+  color: var(--glow);
+}
+
+.filter-fit {
+  font-size: 0.6875rem;
+  color: var(--dim);
+  line-height: 1.5;
+}
+
+.filter-cost {
+  font-size: 0.6563rem;
+  color: var(--faint);
+  line-height: 1.5;
+}
+
+.filter-note {
+  margin: 2px 0 0;
+}

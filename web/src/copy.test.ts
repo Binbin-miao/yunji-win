@@ -29,8 +29,22 @@ describe('文案表', () => {
   })
 
   it('滤波器与增益档位数量固定，不会与设备编号错位', () => {
-    expect(COPY.filterModes).toHaveLength(5)
+    expect(COPY.filters).toHaveLength(5)
     expect(COPY.gainLevels).toHaveLength(2)
+  })
+
+  it('每个滤波模式的适配说明都不为空且不超过 18 字', () => {
+    for (const f of COPY.filters) {
+      expect(f.name.length).toBeGreaterThan(0)
+      expect(f.fit.length, `${f.name} 的适合说明为空`).toBeGreaterThan(0)
+      expect(f.fit.length, `${f.name} 的适合说明太长：${f.fit}`).toBeLessThanOrEqual(18)
+      expect(f.cost.length, `${f.name} 的代价说明太长：${f.cost}`).toBeLessThanOrEqual(18)
+    }
+  })
+
+  it('滤波模式卡片带免责说明，避免被当成实测数据', () => {
+    expect(COPY.filterNote).toContain('示意')
+    expect(COPY.filterNote).toContain('经验')
   })
 
   it('同一概念只有一种说法：控件标签不重复', () => {
