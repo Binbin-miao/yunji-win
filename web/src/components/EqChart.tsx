@@ -357,6 +357,14 @@ export default function EqChart({ bands, target, range, selected, onSelect, onCh
     onChange(replaceBand(bands, selected, nudgeBand(band, e.key, e.shiftKey, limits)), false)
   }
 
+  // 读屏软件没法理解画布，这里把曲线念成一句话
+  const chartLabel =
+    '参数均衡器曲线：' +
+    bands
+      .map((b, i) => `第 ${i + 1} 段 ${b.freq} 赫兹 ${b.gain > 0 ? '+' : ''}${b.gain} 分贝 Q ${b.q}`)
+      .join('；') +
+    (selected != null ? `。当前选中第 ${selected + 1} 段` : '')
+
   return (
     <div ref={wrapRef} className="chart">
       <canvas
@@ -364,7 +372,8 @@ export default function EqChart({ bands, target, range, selected, onSelect, onCh
         className="chart-canvas"
         tabIndex={0}
         role="application"
-        aria-label="参数均衡器曲线，可拖动锚点调整，方向键微调，Delete 删除"
+        aria-label={chartLabel}
+        aria-describedby="chart-help"
         onPointerDown={onPointerDown}
         onPointerMove={onPointerMove}
         onPointerUp={onPointerUp}
@@ -374,6 +383,10 @@ export default function EqChart({ bands, target, range, selected, onSelect, onCh
         onWheel={onWheel}
         onKeyDown={onKeyDown}
       />
+      <span id="chart-help" className="visually-hidden">
+        共 {bands.length} 段，当前选中第 {(selected ?? 0) + 1} 段时可用方向键调整频率与增益，
+        按住 Shift 步进更大，Delete 删除该段。
+      </span>
     </div>
   )
 }

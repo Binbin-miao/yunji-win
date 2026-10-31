@@ -122,7 +122,12 @@ export default function TunePage({
           </button>
           <div className="chips">
             {DB_RANGES.map(r => (
-              <button key={r} className={`chip ${dbRange === r ? 'on' : ''}`} onClick={() => onDbRange(r)}>
+              <button
+                key={r}
+                className={`chip ${dbRange === r ? 'on' : ''}`}
+                aria-pressed={dbRange === r}
+                onClick={() => onDbRange(r)}
+              >
                 ±{r} dB
               </button>
             ))}
@@ -156,6 +161,7 @@ export default function TunePage({
           <span className="hint">目标曲线</span>
           <button
             className={`chip ${targetId === 'none' ? 'on' : ''}`}
+            aria-pressed={targetId === 'none'}
             onClick={() => setTargetId('none')}
             title={COPY.controls.targetNone.hint}
           >
@@ -165,6 +171,7 @@ export default function TunePage({
             <button
               key={t.id}
               className={`chip ${targetId === t.id ? 'on' : ''}`}
+              aria-pressed={targetId === t.id}
               onClick={() => setTargetId(t.id)}
               title={t.source}
             >
@@ -228,6 +235,7 @@ export default function TunePage({
               type="button"
               className={`band ${selected === i ? 'on' : ''}`}
               key={`${b.freq}-${i}`}
+              aria-pressed={selected === i}
               onClick={() => setSelected(i)}
               title={`第 ${i + 1} 段：${b.freq} Hz / ${b.gain} dB / Q ${b.q}`}
             >
@@ -317,6 +325,7 @@ export default function TunePage({
                   <button
                     key={name}
                     className={`chip ${state.filter === i ? 'on' : ''}`}
+                    aria-pressed={state.filter === i}
                     onClick={() => apply('filter', i)}
                   >
                     {name}
@@ -336,6 +345,7 @@ export default function TunePage({
                   <button
                     key={name}
                     className={`chip ${state.gain === i ? 'on' : ''}`}
+                    aria-pressed={state.gain === i}
                     onClick={() => apply('gain', i)}
                   >
                     {name}
