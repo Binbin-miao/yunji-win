@@ -4,7 +4,7 @@
 
 **关键词**：云姬电脑版 · 云姬 Windows 版 · 云姬 PC 版 · 云姬电脑端下载 · 小尾巴调音软件 · 解码耳放 EQ 工具 · TTGK · 旋润 · USB DAC 调音
 
-🌐 **官网落地页**：<https://binbin-miao.github.io/yunji-win/> ｜ ⬇ **下载**：[Releases](https://github.com/Binbin-miao/yunji-win/releases/latest)
+🌐 **官网落地页**：<https://binbin-miao.github.io/yunji-win/> ｜ 🎛 **网页版（免安装）**：<https://binbin-miao.github.io/yunji-win/web/> ｜ ⬇ **下载**：[Releases](https://github.com/Binbin-miao/yunji-win/releases/latest)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Platform: Windows](https://img.shields.io/badge/Platform-Windows%2010%2F11-brightgreen.svg)]()
@@ -96,6 +96,7 @@
 
 > 版本号规则：主体版本对应官方安卓版版本；若仅有移植版自身修订，则追加 `.N`（如 `1.7.6.1`）。
 
+
 ### 方式二：从源码运行
 
 要求 Python 3.10 及以上环境：
@@ -111,6 +112,20 @@ pip install -r requirements.txt
 # 3. 运行桌面端应用
 python app/main.py
 ```
+
+### 方式三：网页版（免安装，浏览器直连）
+
+打开 <https://binbin-miao.github.io/yunji-win/web/>，点「连接真机」，在浏览器弹窗里选中音频设备即可 —— 不下载、不安装、不装驱动。
+
+| 项目 | 说明 |
+| :--- | :--- |
+| 浏览器要求 | **桌面版** Chrome / Edge 113+（依赖 WebHID）。手机浏览器没有这个能力，页面只会显示一句「请用电脑打开」 |
+| 支持机型 | TTGK 阵营 4 款（凌云剑 / 青云剑 / 云中剑 / Q25）。旋润 3 款走厂商控制传输，浏览器无法发起，请用桌面版 |
+| 可调功能 | 音量 / 麦克风 / 声道平衡 / 滤波器 / 增益；8 段 EQ 曲线拖拽编辑与写入硬件；预设；四种格式导入与拟合；目标曲线对比 |
+| 与桌面版的差别 | 指示灯在浏览器通道只读；旁通 / A-B 对比、导出分享图暂未移植 |
+| 源码 | [`web/`](web/)（Vite + React + TypeScript），协议细节见 [`docs/web-hid-framing.md`](docs/web-hid-framing.md) |
+
+> 刷新页面后需要重新点一次「连接真机」——浏览器每次连接都要求用户主动选择设备，这是安全限制，不是故障。
 
 ---
 
