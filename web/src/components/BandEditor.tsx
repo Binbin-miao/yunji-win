@@ -90,7 +90,7 @@ export default function BandEditor({ band, index, limits, onChange, onDelete }: 
       <span className="bf-range">
         可调范围 {Math.round(limits.minFreq)} – {Math.round(limits.maxFreq)} Hz
       </span>
-      <button className="chip" onClick={onDelete}>
+      <button className="chip" onClick={onDelete} title="删掉选中的频段">
         删除这一段
       </button>
     </div>

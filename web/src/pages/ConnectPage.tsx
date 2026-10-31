@@ -34,7 +34,6 @@ export default function ConnectPage({
   return (
     <>
       {!hidReady && <div className="banner">{isMobile ? COPY.mobile : COPY.noHid}</div>}
-      {device?.kind === 'simulator' && <div className="banner sim">{COPY.simBanner}</div>}
       {error && <div className="banner error">{error}</div>}
       {failed.length > 0 && (
         <div className="banner">

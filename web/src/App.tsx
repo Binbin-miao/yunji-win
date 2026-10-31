@@ -401,6 +401,8 @@ export default function App() {
           <span className="hint">{NAV.find(n => n.key === page)?.label}</span>
         </header>
 
+        {device?.kind === 'simulator' && <div className="banner sim">{COPY.simBanner}</div>}
+
         {page === 'connect' && (
           <ConnectPage
             device={device}

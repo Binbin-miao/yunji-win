@@ -77,7 +77,7 @@ export default function ImportPanel({ onApply }: Props) {
         />
       </div>
       <div className="row">
-        <button className="chip" onClick={() => fileRef.current?.click()}>
+        <button className="chip" onClick={() => fileRef.current?.click()} title="从本地读一份配置">
           选择文件
         </button>
         <input
@@ -101,7 +101,7 @@ export default function ImportPanel({ onApply }: Props) {
           </span>
         )}
         <div className="spacer" />
-        <button className="chip" onClick={apply} disabled={!canApply}>
+        <button className="chip" onClick={apply} disabled={!canApply} title="把解析结果填进曲线">
           应用到曲线
         </button>
       </div>
@@ -119,7 +119,7 @@ export default function ImportPanel({ onApply }: Props) {
               : `导入 ${bandCount} 段，超过设备 ${MAX_BANDS} 段上限，需要先拟合`}
           </span>
           <div className="spacer" />
-          <button className="chip" onClick={runFit}>
+          <button className="chip" onClick={runFit} title="超 8 段时压缩成设备上限">
             拟合成 {MAX_BANDS} 段
           </button>
         </div>
@@ -146,7 +146,7 @@ export default function ImportPanel({ onApply }: Props) {
               <span className="hint">源 {fit.sourceCount} → {fit.bands.length} 段</span>
             </div>
             <div className="spacer" />
-            <button className="chip" onClick={() => setFit(null)}>
+            <button className="chip" onClick={() => setFit(null)} title="不改变当前曲线">
               放弃拟合
             </button>
             <button

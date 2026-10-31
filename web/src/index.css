@@ -832,3 +832,19 @@ body {
   margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
+
+.link {
+  background: none;
+  border: 0;
+  padding: 0 0 0 8px;
+  color: var(--violet);
+  font-family: inherit;
+  font-size: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.link:hover {
+  color: var(--glow);
+}

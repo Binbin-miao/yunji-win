@@ -67,6 +67,7 @@ export default function TunePage({
   const [confirming, setConfirming] = useState(false)
   const [importing, setImporting] = useState(false)
   const [targetId, setTargetId] = useState('none')
+  const [showOps, setShowOps] = useState(() => localStorage.getItem('yunji.opsHidden') !== '1')
 
   const target = TARGETS.find(t => t.id === targetId) ?? null
   const stats = target ? diffStats(bands, target) : null
@@ -88,22 +89,36 @@ export default function TunePage({
           <h2>参数均衡器</h2>
           <span className="hint">proEQ · 8 段峰值 · 48 kHz 显示域</span>
           <div className="spacer" />
-          <button className="chip" onClick={onUndo} disabled={!canUndo} title="撤销 (Ctrl+Z)">
-            撤销
+          <button
+            className="chip"
+            onClick={onUndo}
+            disabled={!canUndo}
+            title={`${COPY.controls.undo.hint}（Ctrl+Z）`}
+          >
+            {COPY.controls.undo.label}
           </button>
-          <button className="chip" onClick={onRedo} disabled={!canRedo} title="重做 (Ctrl+Shift+Z)">
-            重做
+          <button
+            className="chip"
+            onClick={onRedo}
+            disabled={!canRedo}
+            title={`${COPY.controls.redo.hint}（Ctrl+Shift+Z）`}
+          >
+            {COPY.controls.redo.label}
           </button>
-          <button className="chip" onClick={() => setImporting(v => !v)}>
-            {importing ? '收起导入' : '导入'}
+          <button
+            className="chip"
+            onClick={() => setImporting(v => !v)}
+            title={COPY.controls.import.hint}
+          >
+            {importing ? '收起导入' : COPY.controls.import.label}
           </button>
           <button
             className="btn"
             onClick={() => setConfirming(true)}
             disabled={eqStatus.kind === 'writing' || device.kind === 'simulator'}
-            title={device.kind === 'simulator' ? '模拟器不写入设备' : '把当前 8 段写入设备'}
+            title={device.kind === 'simulator' ? '模拟器不写入设备' : COPY.controls.writeEq.hint}
           >
-            {eqStatus.kind === 'writing' ? '写入中…' : '写入设备'}
+            {eqStatus.kind === 'writing' ? COPY.controls.writeEqDone.label : COPY.controls.writeEq.label}
           </button>
           <div className="chips">
             {DB_RANGES.map(r => (
@@ -124,10 +139,10 @@ export default function TunePage({
                 onWriteEq()
               }}
             >
-              确认写入
+              {COPY.controls.confirmWrite.label}
             </button>
             <button className="chip" onClick={() => setConfirming(false)}>
-              取消
+              {COPY.controls.cancel.label}
             </button>
           </div>
         )}
@@ -139,8 +154,12 @@ export default function TunePage({
 
         <div className="row target-row">
           <span className="hint">目标曲线</span>
-          <button className={`chip ${targetId === 'none' ? 'on' : ''}`} onClick={() => setTargetId('none')}>
-            不叠加
+          <button
+            className={`chip ${targetId === 'none' ? 'on' : ''}`}
+            onClick={() => setTargetId('none')}
+            title={COPY.controls.targetNone.hint}
+          >
+            {COPY.controls.targetNone.label}
           </button>
           {TARGETS.map(t => (
             <button
@@ -171,11 +190,38 @@ export default function TunePage({
           onBegin={onBandsBegin}
           onCommit={onBandsCommit}
         />
-        <p className="hint ops">
-          拖动锚点改频率与增益 · Ctrl 拖动锁单轴 · 滚轮／Shift+滚轮调 Q · 点空白加段（最多 {MAX_BANDS} 段）·
-          双击归零 · 右键删除 · 方向键微调 · Delete 删除
-          {bands.length >= MAX_BANDS && <span className="write warn"> 已满 {MAX_BANDS} 段，删掉一段才能再加</span>}
-        </p>
+        {showOps ? (
+          <p className="hint ops">
+            {COPY.ops.eq} · {COPY.ops.limit.replace('{n}', String(MAX_BANDS))}
+            {bands.length >= MAX_BANDS && (
+              <span className="write warn">
+                {' '}
+                {COPY.ops.full.replace('{n}', String(MAX_BANDS))}
+              </span>
+            )}
+            <button
+              className="link"
+              onClick={() => {
+                localStorage.setItem('yunji.opsHidden', '1')
+                setShowOps(false)
+              }}
+            >
+              {COPY.ops.hide}
+            </button>
+          </p>
+        ) : (
+          <p className="hint ops">
+            <button
+              className="link"
+              onClick={() => {
+                localStorage.removeItem('yunji.opsHidden')
+                setShowOps(true)
+              }}
+            >
+              {COPY.ops.show}
+            </button>
+          </p>
+        )}
         <div className="bands">
           {bands.map((b, i) => (
             <button
@@ -205,9 +251,7 @@ export default function TunePage({
           />
         )}
         <p className="hint">
-          {device.kind === 'simulator'
-            ? '模拟器示例曲线，改完不会写入任何设备'
-            : '曲线改动只存在本地，写入设备在 09 号工单接入'}
+          {device.kind === 'simulator' ? COPY.eqSimHint : COPY.eqLocalHint}
         </p>
       </section>
 
