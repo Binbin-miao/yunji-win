@@ -74,15 +74,77 @@ body {
   display: grid;
   place-items: center;
   border-radius: 11px;
+  border: 0;
+  background: transparent;
   color: var(--faint);
   font-size: 16px;
-  cursor: default;
+  font-family: inherit;
+  cursor: pointer;
+  transition: 0.15s;
+}
+
+.rail-item:hover {
+  color: var(--ink);
+  background: rgba(161, 117, 240, 0.1);
 }
 
 .rail-item.on {
   color: var(--glow);
   background: rgba(161, 117, 240, 0.16);
   box-shadow: inset 0 0 0 1px var(--line2);
+}
+
+/* 通用行与表格 */
+.row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dev-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dev-name {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.kv {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.kv td {
+  padding: 7px 2px;
+  border-bottom: 1px solid rgba(196, 164, 255, 0.07);
+  vertical-align: top;
+}
+
+.kv td:first-child {
+  width: 110px;
+  color: var(--faint);
+}
+
+.limits {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12.5px;
+  color: var(--dim);
+  line-height: 1.7;
+}
+
+.limits li::before {
+  content: '·';
+  color: var(--violet);
+  margin-right: 8px;
 }
 
 /* ---------- 主区 ---------- */

@@ -1,22 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { COPY } from './copy'
-import { DEVICE_MODELS } from './data/devices'
 import { createDebouncer, type Debouncer } from './domain/commit'
-import { balDisplay, micDisplay, volBounds, volDisplay, volRaw } from './domain/params'
 import { DB_RANGES, DEFAULT_BANDS, DEMO_BANDS, type EqBand } from './domain/eq'
-import EqChart from './components/EqChart'
+import { balDisplay, micDisplay, volBounds, volDisplay, volRaw } from './domain/params'
 import { SimulatorTransport } from './transport/simulator'
 import { WebHidTransport } from './transport/webhid'
 import { STAGE_TEXT, TransportError } from './transport/errors'
 import type { ConnectedDevice, DeviceState, Transport } from './transport/types'
+import type { PageKey, ParamKey, SliderKey, WriteStatus } from './types/ui'
+import ConnectPage from './pages/ConnectPage'
+import TunePage from './pages/TunePage'
+import PresetsPage from './pages/PresetsPage'
+import AboutPage from './pages/AboutPage'
 
 const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(
   typeof navigator === 'undefined' ? '' : navigator.userAgent,
 )
-
-type WriteStatus = { kind: 'idle' | 'writing' | 'done' | 'warn' | 'error'; text?: string }
-type SliderKey = 'volume' | 'mic' | 'balance'
-type ParamKey = SliderKey | 'filter' | 'gain' | 'led'
 
 const SLIDERS: Record<SliderKey, { min: number; max: number }> = {
   volume: { min: 0, max: 60 }, // 运行时按芯片覆盖
@@ -24,7 +23,15 @@ const SLIDERS: Record<SliderKey, { min: number; max: number }> = {
   balance: { min: -20, max: 20 },
 }
 
+const NAV: Array<{ key: PageKey; icon: string; label: string }> = [
+  { key: 'connect', icon: '◈', label: '连接' },
+  { key: 'tune', icon: '∿', label: '调音' },
+  { key: 'presets', icon: '⌸', label: '预设' },
+  { key: 'about', icon: '⌾', label: '关于' },
+]
+
 export default function App() {
+  const [page, setPage] = useState<PageKey>('connect')
   const [hidReady, setHidReady] = useState(false)
   const [device, setDevice] = useState<ConnectedDevice | null>(null)
   const [state, setState] = useState<DeviceState | null>(null)
@@ -40,7 +47,6 @@ export default function App() {
   const [dbRange, setDbRange] = useState<(typeof DB_RANGES)[number]>(12)
 
   const debouncers = useRef<Partial<Record<SliderKey, Debouncer<number>>>>({})
-  /** 每次连接/断开自增，用来丢弃上一 session 的异步回调 */
   const sessionRef = useRef(0)
   const applyRef = useRef<(key: ParamKey, value: number) => void>(() => undefined)
   const transportRef = useRef<Transport | null>(null)
@@ -49,7 +55,7 @@ export default function App() {
     setHidReady(WebHidTransport.supported())
   }, [])
 
-  // 拔线后清空界面，避免显示「已连接」但所有操作都失败
+  // 拔线后清空界面
   useEffect(() => {
     const hid = navigator.hid
     if (!hid || !device) return
@@ -84,88 +90,84 @@ export default function App() {
     }
   }, [])
 
-  /** 把一次参数写入落到设备，并回填结果 */
-  const apply = useCallback(async (key: ParamKey, value: number) => {
-    const t = transportRef.current
-    if (!t) return
-    const session = sessionRef.current
-    setStatus(s => ({ ...s, [key]: { kind: 'writing' } }))
+  const apply = useCallback(
+    async (key: ParamKey, value: number) => {
+      const t = transportRef.current
+      if (!t) return
+      const session = sessionRef.current
+      setStatus(s => ({ ...s, [key]: { kind: 'writing' } }))
 
-    const finish = (sent: number, back: number, describe: (v: number) => string) => {
-      if (session !== sessionRef.current) return
-      if (back === sent) {
-        setStatus(s => ({ ...s, [key]: { kind: 'done', text: `已写入 ${describe(back)}` } }))
-      } else {
-        // 设备有量化或延迟，回读与写入值不同不算失败，但要如实告知
-        setStatus(s => ({
-          ...s,
-          [key]: { kind: 'warn', text: `已写入 ${describe(sent)}，设备回读 ${describe(back)}` },
-        }))
-      }
-      setDrafts(d => {
-        const next = { ...d }
-        if (key === 'volume' || key === 'mic' || key === 'balance') delete next[key]
-        return next
-      })
-    }
-
-    try {
-      if (key === 'volume') {
-        const back = await t.setVolume(value)
+      const finish = (sent: number, back: number, describe: (v: number) => string) => {
         if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, volume: back } : s))
-        finish(value, back, v => String(volDisplay(v, chip)))
-      } else if (key === 'mic') {
-        const back = await t.setMic(value)
-        if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, mic: back } : s))
-        finish(value, back, v => micDisplay(v))
-      } else if (key === 'balance') {
-        const back = await t.setBalance(value)
-        if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, balance: back } : s))
-        finish(value, back, v => balDisplay(v))
-      } else if (key === 'filter') {
-        const back = await t.setFilter(value)
-        if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, filter: back } : s))
-        finish(value, back, v => COPY.filterModes[v] ?? String(v))
-      } else if (key === 'gain') {
-        const back = await t.setGain(value)
-        if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, gain: back } : s))
-        finish(value, back, v => COPY.gainLevels[v] ?? String(v))
-      } else {
-        const back = await t.setLed(value !== 0)
-        if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, led: back } : s))
-        finish(value !== 0 ? 1 : 0, back ? 1 : 0, v => (v ? '开' : '关'))
-      }
-    } catch (e) {
-      if (session !== sessionRef.current) return
-      const msg =
-        e instanceof TransportError
-          ? `${STAGE_TEXT[e.stage]}：${e.message}`
-          : e instanceof Error
-            ? e.message
-            : String(e)
-      setStatus(s => ({ ...s, [key]: { kind: 'error', text: msg } }))
-      setDrafts(d => {
-        const next = { ...d }
-        if (key === 'volume' || key === 'mic' || key === 'balance') delete next[key]
-        return next
-      })
-      try {
-        const res = await t.readState()
-        if (session === sessionRef.current) {
-          setState(res.state)
-          setFailed(res.failed)
+        if (back === sent) {
+          setStatus(s => ({ ...s, [key]: { kind: 'done', text: `已写入 ${describe(back)}` } }))
+        } else {
+          setStatus(s => ({
+            ...s,
+            [key]: { kind: 'warn', text: `已写入 ${describe(sent)}，设备回读 ${describe(back)}` },
+          }))
         }
-      } catch {
-        /* 回读也失败时保持原样，错误提示已给出 */
+        setDrafts(d => {
+          const next = { ...d }
+          if (key === 'volume' || key === 'mic' || key === 'balance') delete next[key]
+          return next
+        })
       }
-    }
-  }, [chip])
+
+      try {
+        if (key === 'volume') {
+          const back = await t.setVolume(value)
+          if (session !== sessionRef.current) return
+          setState(s => (s ? { ...s, volume: back } : s))
+          finish(value, back, v => String(volDisplay(v, chip)))
+        } else if (key === 'mic') {
+          const back = await t.setMic(value)
+          if (session !== sessionRef.current) return
+          setState(s => (s ? { ...s, mic: back } : s))
+          finish(value, back, v => micDisplay(v))
+        } else if (key === 'balance') {
+          const back = await t.setBalance(value)
+          if (session !== sessionRef.current) return
+          setState(s => (s ? { ...s, balance: back } : s))
+          finish(value, back, v => balDisplay(v))
+        } else if (key === 'filter') {
+          const back = await t.setFilter(value)
+          if (session !== sessionRef.current) return
+          setState(s => (s ? { ...s, filter: back } : s))
+          finish(value, back, v => COPY.filterModes[v] ?? String(v))
+        } else {
+          const back = await t.setGain(value)
+          if (session !== sessionRef.current) return
+          setState(s => (s ? { ...s, gain: back } : s))
+          finish(value, back, v => COPY.gainLevels[v] ?? String(v))
+        }
+      } catch (e) {
+        if (session !== sessionRef.current) return
+        const msg =
+          e instanceof TransportError
+            ? `${STAGE_TEXT[e.stage]}：${e.message}`
+            : e instanceof Error
+              ? e.message
+              : String(e)
+        setStatus(s => ({ ...s, [key]: { kind: 'error', text: msg } }))
+        setDrafts(d => {
+          const next = { ...d }
+          if (key === 'volume' || key === 'mic' || key === 'balance') delete next[key]
+          return next
+        })
+        try {
+          const res = await t.readState()
+          if (session === sessionRef.current) {
+            setState(res.state)
+            setFailed(res.failed)
+          }
+        } catch {
+          /* 回读失败时保留原状态，错误已提示 */
+        }
+      }
+    },
+    [chip],
+  )
 
   useEffect(() => {
     transportRef.current = transport
@@ -193,10 +195,10 @@ export default function App() {
         setDevice(connected)
         setStatus({})
         setDrafts({})
-        // 模拟器给一条示例曲线；真机暂时用平直曲线（设备内 EQ 读取在 09 号实现）
         setBands(connected.kind === 'simulator' ? DEMO_BANDS : DEFAULT_BANDS)
         attach()
         await load(next)
+        setPage('tune')
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -206,7 +208,7 @@ export default function App() {
     [attach, load],
   )
 
-  // 开发/演示用：地址带 ?sim=1 直接进模拟器，方便截图与回归
+  // 开发/演示用：地址带 ?sim=1 直接进模拟器
   const autoSim = useRef(false)
   useEffect(() => {
     if (autoSim.current) return
@@ -227,11 +229,11 @@ export default function App() {
       setState(null)
       setDrafts({})
       setStatus({})
+      setPage('connect')
       setBusy(false)
     }
   }
 
-  const statusText = device ? (device.kind === 'simulator' ? '模拟器' : '已连接') : '未连接'
   const volRange = volBounds(chip)
 
   function shown(key: SliderKey): number {
@@ -242,22 +244,25 @@ export default function App() {
     return state.balance
   }
 
+  function range(key: SliderKey) {
+    if (key === 'volume') return volRange
+    return SLIDERS[key]
+  }
+
   function slide(key: SliderKey, v: number) {
     setDrafts(d => ({ ...d, [key]: v }))
     setStatus(s => ({ ...s, [key]: { kind: 'idle' } }))
   }
 
   function commit(key: SliderKey) {
-    const raw =
-      key === 'volume' ? volRaw(shown('volume'), chip) : Math.round(shown(key))
+    const raw = key === 'volume' ? volRaw(shown('volume'), chip) : Math.round(shown(key))
     debouncers.current[key]?.schedule(raw)
   }
 
-  /** 手填数值：Enter 或失焦提交，越界夹到区间，非法输入丢弃 */
   function commitText(key: SliderKey) {
     const text = texts[key]
     if (text === undefined) return
-    setTexts(t => ({ ...t, [key]: undefined }))
+    setText(key, undefined)
     const n = Number(text)
     if (!Number.isFinite(n)) return
     const r = range(key)
@@ -266,20 +271,11 @@ export default function App() {
     debouncers.current[key]?.schedule(key === 'volume' ? volRaw(clamped, chip) : clamped)
   }
 
-  function range(key: SliderKey) {
-    if (key === 'volume') return volRange
-    return SLIDERS[key]
+  function setText(key: SliderKey, value: string | undefined) {
+    setTexts(t => ({ ...t, [key]: value }))
   }
 
-  const statusNode = (key: ParamKey) => {
-    const s = status[key]
-    if (!s || s.kind === 'idle') return null
-    return (
-      <span className={`write ${s.kind}`}>
-        {s.kind === 'writing' ? '写入中…' : (s.text ?? (s.kind === 'error' ? '写入失败' : '已写入'))}
-      </span>
-    )
-  }
+  const statusText = device ? (device.kind === 'simulator' ? '模拟器' : '已连接') : '未连接'
 
   return (
     <div className="shell">
@@ -294,9 +290,17 @@ export default function App() {
           <circle cx="20" cy="19" r="2.2" fill="#C9A6FF" />
         </svg>
         <nav>
-          <span className="rail-item on" title="设备">◈</span>
-          <span className="rail-item" title="调音">∿</span>
-          <span className="rail-item" title="预设">⌸</span>
+          {NAV.map(item => (
+            <button
+              key={item.key}
+              className={`rail-item ${page === item.key ? 'on' : ''}`}
+              onClick={() => setPage(item.key)}
+              title={item.label}
+              aria-label={item.label}
+            >
+              {item.icon}
+            </button>
+          ))}
         </nav>
       </aside>
 
@@ -311,234 +315,64 @@ export default function App() {
             {statusText}
           </div>
           <div className="spacer" />
-          {device ? (
-            <>
-              <button className="btn ghost" onClick={() => transport && load(transport)} disabled={busy || reading}>
-                {reading ? COPY.reading : COPY.reread}
-              </button>
-              <button className="btn ghost" onClick={disconnect} disabled={busy}>
-                {COPY.disconnect}
-              </button>
-            </>
-          ) : (
-            <>
-              <button
-                className="btn"
-                onClick={() => run(new WebHidTransport())}
-                disabled={busy || !hidReady}
-                title={COPY.hintReal}
-              >
-                {COPY.connectReal}
-              </button>
-              <button
-                className="btn ghost"
-                onClick={() => run(new SimulatorTransport())}
-                disabled={busy}
-                title={COPY.hintSim}
-              >
-                {COPY.connectSim}
-              </button>
-            </>
-          )}
+          <span className="hint">{NAV.find(n => n.key === page)?.label}</span>
         </header>
 
-        {!hidReady && <div className="banner">{isMobile ? COPY.mobile : COPY.noHid}</div>}
-        {device?.kind === 'simulator' && <div className="banner sim">{COPY.simBanner}</div>}
-        {error && <div className="banner error">{error}</div>}
-        {failed.length > 0 && (
-          <div className="banner">
-            以下参数读取失败：
-            {failed.map(k => COPY.param[k].label).join('、')}。其余参数可正常使用，可点「重新读取」重试，
-            或拔插设备后再连。
-          </div>
+        {page === 'connect' && (
+          <ConnectPage
+            device={device}
+            state={state}
+            failed={failed}
+            hidReady={hidReady}
+            isMobile={isMobile}
+            busy={busy}
+            reading={reading}
+            error={error}
+            onConnectReal={() => run(new WebHidTransport())}
+            onConnectSim={() => run(new SimulatorTransport())}
+            onReload={() => transport && load(transport)}
+            onDisconnect={disconnect}
+          />
         )}
 
-        {device && (
-          <section className="card">
-            <div className="card-head">
-              <h2>{device.name}</h2>
-              <span className="mono">
-                {device.vendorId.toString(16).padStart(4, '0')}:
-                {device.productId.toString(16).padStart(4, '0')}
-              </span>
-              <span className="badge">{device.kind === 'simulator' ? '模拟器' : '真机'}</span>
-              <span className="hint">
-                {device.model ? `${device.model.vendor} · ${device.model.name}` : '未知品牌'}
-              </span>
-            </div>
-          </section>
-        )}
-
-        {device && (
-          <section className="card">
-            <div className="card-head">
-              <h2>参数均衡器</h2>
-              <span className="hint">proEQ · 8 段峰值 · 48 kHz 显示域</span>
-              <div className="spacer" />
-              <div className="chips">
-                {DB_RANGES.map(r => (
-                  <button
-                    key={r}
-                    className={`chip ${dbRange === r ? 'on' : ''}`}
-                    onClick={() => setDbRange(r)}
-                  >
-                    ±{r} dB
-                  </button>
-                ))}
+        {page === 'tune' &&
+          (device ? (
+            <TunePage
+              device={device}
+              state={state}
+              failed={failed}
+              bands={bands}
+              dbRange={dbRange}
+              onDbRange={setDbRange}
+              status={status}
+              texts={texts}
+              setText={setText}
+              shown={shown}
+              range={range}
+              slide={slide}
+              commit={commit}
+              commitText={commitText}
+              apply={(key, value) => void apply(key, value)}
+            />
+          ) : (
+            <section className="card">
+              <div className="card-head">
+                <h2>还没连接设备</h2>
               </div>
-            </div>
-            <EqChart bands={bands} range={dbRange} />
-            <div className="bands">
-              {bands.map((b, i) => (
-                <div className="band" key={`${b.freq}-${i}`}>
-                  <span className="band-i">{i + 1}</span>
-                  <span className="band-f">{b.freq >= 1000 ? `${b.freq / 1000}k` : b.freq}</span>
-                  <span className="band-g">{b.gain > 0 ? `+${b.gain}` : b.gain}</span>
-                </div>
-              ))}
-            </div>
-            <p className="hint">
-              {device.kind === 'simulator'
-                ? '模拟器示例曲线；真机上此处显示设备内 EQ'
-                : '设备内 EQ 读取将在写入功能接入后同步，当前显示为平直曲线'}
-            </p>
-          </section>
-        )}
-
-        {device && state && (
-          <section className="card">
-            <div className="card-head">
-              <h2>{COPY.sectionState}</h2>
-              <span className="hint">{COPY.sectionStateHint}</span>
-            </div>
-            <div className="params">
-              {(['volume', 'mic', 'balance'] as const).map(key => {
-                const r = range(key)
-                return (
-                  <div className="param param-wide" key={key}>
-                    <div className="param-top">
-                      <span className="param-label">{COPY.param[key].label}</span>
-                      <input
-                        className="num"
-                        type="text"
-                        inputMode="numeric"
-                        value={texts[key] ?? String(shown(key))}
-                        disabled={status[key]?.kind === 'writing'}
-                        onChange={e => setTexts(t => ({ ...t, [key]: e.target.value }))}
-                        onBlur={() => commitText(key)}
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') e.currentTarget.blur()
-                          if (e.key === 'Escape') {
-                            setTexts(t => ({ ...t, [key]: undefined }))
-                            e.currentTarget.blur()
-                          }
-                        }}
-                        aria-label={`${COPY.param[key].label} 数值`}
-                      />
-                      {statusNode(key)}
-                    </div>
-                    <input
-                      className="slider"
-                      type="range"
-                      min={r.min}
-                      max={r.max}
-                      step={1}
-                      value={shown(key)}
-                      disabled={status[key]?.kind === 'writing'}
-                      onChange={e => slide(key, Number(e.target.value))}
-                      onPointerUp={() => commit(key)}
-                      onKeyUp={() => commit(key)}
-                      aria-label={COPY.param[key].label}
-                    />
-                    <span className="param-hint">{COPY.param[key].hint}</span>
-                  </div>
-                )
-              })}
-
-              <div className="param param-wide">
-                <div className="param-top">
-                  <span className="param-label">{COPY.param.filter.label}</span>
-                  {statusNode('filter')}
-                </div>
-                <div className="chips">
-                  {COPY.filterModes.map((name, i) => (
-                    <button
-                      key={name}
-                      className={`chip ${state.filter === i ? 'on' : ''}`}
-                      onClick={() => apply('filter', i)}
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
-                <span className="param-hint">{COPY.param.filter.hint}</span>
+              <p className="hint">先去「连接」页连接真机，或点下面进入模拟器。</p>
+              <div className="row" style={{ marginTop: 12 }}>
+                <button className="btn" onClick={() => setPage('connect')}>
+                  去连接
+                </button>
+                <button className="btn ghost" onClick={() => run(new SimulatorTransport())} disabled={busy}>
+                  {COPY.connectSim}
+                </button>
               </div>
+            </section>
+          ))}
 
-              <div className="param">
-                <div className="param-top">
-                  <span className="param-label">{COPY.param.gain.label}</span>
-                  {statusNode('gain')}
-                </div>
-                <div className="chips">
-                  {COPY.gainLevels.map((name, i) => (
-                    <button
-                      key={name}
-                      className={`chip ${state.gain === i ? 'on' : ''}`}
-                      onClick={() => apply('gain', i)}
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
-                <span className="param-hint">{COPY.param.gain.hint}</span>
-              </div>
-
-              <div className="param">
-                <div className="param-top">
-                  <span className="param-label">{COPY.param.led.label}</span>
-                </div>
-                <strong className="param-value small">{failed.includes('led') ? '—' : state.led ? '开' : '关'}</strong>
-                <span className="param-hint">{COPY.param.led.hint}</span>
-              </div>
-
-              <div className="param">
-                <div className="param-top">
-                  <span className="param-label">{COPY.param.firmware.label}</span>
-                </div>
-                <strong className="param-value small">
-                  {failed.includes('firmware') ? '—' : state.firmware}
-                </strong>
-                <span className="param-hint">{COPY.param.firmware.hint}</span>
-              </div>
-            </div>
-          </section>
-        )}
-
-        <section className="card">
-          <div className="card-head">
-            <h2>{COPY.sectionModels}</h2>
-            <span className="hint">{COPY.sectionModelsHint}</span>
-          </div>
-          <div className="models">
-            {DEVICE_MODELS.map(m => (
-              <div
-                key={`${m.vendorId}-${m.productId}`}
-                className={`model ${m.webSupported ? '' : 'model-off'}`}
-              >
-                <div className="model-top">
-                  <strong>{m.name}</strong>
-                  <span className={`tag ${m.webSupported ? 'tag-on' : 'tag-off'}`}>
-                    {m.webSupported ? COPY.supported : COPY.unsupported}
-                  </span>
-                </div>
-                <span className="mono dim">
-                  {m.vendor} · {m.vendorId.toString(16).padStart(4, '0')}:
-                  {m.productId.toString(16).padStart(4, '0')}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
+        {page === 'presets' && <PresetsPage />}
+        {page === 'about' && <AboutPage device={device} state={state} failed={failed} />}
       </main>
     </div>
   )
