@@ -12,7 +12,13 @@ interface Props {
   state: DeviceState | null
   failed: Array<keyof DeviceState>
   bands: EqBand[]
-  onBandsChange: (bands: EqBand[]) => void
+  onBandsChange: (bands: EqBand[], transient?: boolean) => void
+  onBandsBegin: () => void
+  onBandsCommit: () => void
+  canUndo: boolean
+  canRedo: boolean
+  onUndo: () => void
+  onRedo: () => void
   dbRange: (typeof DB_RANGES)[number]
   onDbRange: (r: (typeof DB_RANGES)[number]) => void
   status: Partial<Record<ParamKey, WriteStatus>>
@@ -32,6 +38,12 @@ export default function TunePage({
   failed,
   bands,
   onBandsChange,
+  onBandsBegin,
+  onBandsCommit,
+  canUndo,
+  canRedo,
+  onUndo,
+  onRedo,
   dbRange,
   onDbRange,
   status,
@@ -63,6 +75,12 @@ export default function TunePage({
           <h2>参数均衡器</h2>
           <span className="hint">proEQ · 8 段峰值 · 48 kHz 显示域</span>
           <div className="spacer" />
+          <button className="chip" onClick={onUndo} disabled={!canUndo} title="撤销 (Ctrl+Z)">
+            撤销
+          </button>
+          <button className="chip" onClick={onRedo} disabled={!canRedo} title="重做 (Ctrl+Shift+Z)">
+            重做
+          </button>
           <div className="chips">
             {DB_RANGES.map(r => (
               <button key={r} className={`chip ${dbRange === r ? 'on' : ''}`} onClick={() => onDbRange(r)}>
@@ -77,6 +95,8 @@ export default function TunePage({
           selected={selected}
           onSelect={setSelected}
           onChange={onBandsChange}
+          onBegin={onBandsBegin}
+          onCommit={onBandsCommit}
         />
         <p className="hint ops">
           拖动锚点改频率与增益 · Ctrl 拖动锁单轴 · 滚轮／Shift+滚轮调 Q · 点空白加段（最多 {MAX_BANDS} 段）·

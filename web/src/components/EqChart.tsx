@@ -39,7 +39,12 @@ interface Props {
   range: (typeof DB_RANGES)[number]
   selected: number | null
   onSelect: (index: number | null) => void
-  onChange: (bands: EqBand[]) => void
+  /** transient=true 表示拖拽中的中间态，不入历史 */
+  onChange: (bands: EqBand[], transient?: boolean) => void
+  /** 拖拽开始（用于记录撤销快照） */
+  onBegin?: () => void
+  /** 拖拽结束（提交撤销快照） */
+  onCommit?: () => void
   height?: number
 }
 
@@ -51,7 +56,7 @@ interface DragState {
   moved: boolean
 }
 
-export default function EqChart({ bands, range, selected, onSelect, onChange, height = 320 }: Props) {
+export default function EqChart({ bands, range, selected, onSelect, onChange, onBegin, onCommit, height = 320 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<DragState | null>(null)
@@ -228,6 +233,7 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, he
     if (hit < 0) return
 
     dragRef.current = { index: hit, startBand: bands[hit], startX: x, startY: y, moved: false }
+    onBegin?.()
     e.currentTarget.setPointerCapture(e.pointerId)
   }
 
@@ -247,13 +253,17 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, he
     const lock: LockAxis = e.ctrlKey || e.metaKey ? (Math.abs(dx) >= Math.abs(dy) ? 'gain' : 'freq') : null
     const limits = freqLimits(bandsRef.current, drag.index)
     const next = dragBand(drag.startBand, l, drag.startX, drag.startY, x, y, lock, limits)
-    onChange(replaceBand(bandsRef.current, drag.index, next))
+    onChange(replaceBand(bandsRef.current, drag.index, next), true)
   }
 
   function onPointerUp(e: React.PointerEvent<HTMLCanvasElement>) {
     const drag = dragRef.current
     dragRef.current = null
-    if (!drag || drag.moved) return
+    if (drag?.moved) {
+      onCommit?.()
+      return
+    }
+    if (!drag) return
 
     // 单击空白 → 新增一段
     const l = layout()
@@ -261,7 +271,7 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, he
     if (hitBand(bands, l, x, y) >= 0) return
     if (bands.length >= MAX_BANDS) return
     const created = bandAtPoint(l, x, y)
-    onChange(addBand(bands, created))
+    onChange(addBand(bands, created), false)
     onSelect(null)
   }
 
@@ -271,7 +281,7 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, he
     const hit = hitBand(bands, l, x, y)
     if (hit < 0) return
     // 双击锚点归零（滤波器类型字节设备只认 0x02，故不提供切换）
-    onChange(replaceBand(bands, hit, { ...bands[hit], gain: 0 }))
+    onChange(replaceBand(bands, hit, { ...bands[hit], gain: 0 }), false)
   }
 
   function onContextMenu(e: React.MouseEvent<HTMLCanvasElement>) {
@@ -280,7 +290,7 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, he
     const { x, y } = localPoint(e)
     const hit = hitBand(bands, l, x, y)
     if (hit < 0) return
-    onChange(removeBand(bands, hit))
+    onChange(removeBand(bands, hit), false)
     onSelect(null)
   }
 
@@ -289,7 +299,7 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, he
     const band = bands[selected]
     if (!band) return
     e.preventDefault()
-    onChange(replaceBand(bands, selected, scrollQ(band, e.deltaY, e.shiftKey)))
+    onChange(replaceBand(bands, selected, scrollQ(band, e.deltaY, e.shiftKey)), false)
   }
 
   function onKeyDown(e: React.KeyboardEvent<HTMLCanvasElement>) {
@@ -298,14 +308,14 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, he
     if (!band) return
     if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault()
-      onChange(removeBand(bands, selected))
+      onChange(removeBand(bands, selected), false)
       onSelect(null)
       return
     }
     if (!e.key.startsWith('Arrow')) return
     e.preventDefault()
     const limits = freqLimits(bands, selected)
-    onChange(replaceBand(bands, selected, nudgeBand(band, e.key, e.shiftKey, limits)))
+    onChange(replaceBand(bands, selected, nudgeBand(band, e.key, e.shiftKey, limits)), false)
   }
 
   return (

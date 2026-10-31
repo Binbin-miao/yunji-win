@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { COPY } from './copy'
 import { createDebouncer, type Debouncer } from './domain/commit'
 import { DB_RANGES, DEFAULT_BANDS, DEMO_BANDS, type EqBand } from './domain/eq'
+import { createHistory, type History } from './domain/history'
 import { balDisplay, micDisplay, volBounds, volDisplay, volRaw } from './domain/params'
 import { SimulatorTransport } from './transport/simulator'
 import { WebHidTransport } from './transport/webhid'
@@ -44,12 +45,58 @@ export default function App() {
   const [texts, setTexts] = useState<Partial<Record<SliderKey, string>>>({})
   const [status, setStatus] = useState<Partial<Record<ParamKey, WriteStatus>>>({})
   const [bands, setBands] = useState<EqBand[]>(DEFAULT_BANDS)
+  const historyRef = useRef<History<EqBand[]>>(createHistory<EqBand[]>(DEFAULT_BANDS))
   const [dbRange, setDbRange] = useState<(typeof DB_RANGES)[number]>(12)
 
   const debouncers = useRef<Partial<Record<SliderKey, Debouncer<number>>>>({})
   const sessionRef = useRef(0)
   const applyRef = useRef<(key: ParamKey, value: number) => void>(() => undefined)
   const transportRef = useRef<Transport | null>(null)
+
+  function changeBands(next: EqBand[], transient = false) {
+    historyRef.current.set(next, transient)
+    setBands(historyRef.current.present)
+  }
+  function beginBands() {
+    historyRef.current.begin()
+  }
+  function commitBands() {
+    historyRef.current.commit()
+    setBands(historyRef.current.present)
+  }
+  function undoBands() {
+    historyRef.current.undo()
+    setBands(historyRef.current.present)
+  }
+  function redoBands() {
+    historyRef.current.redo()
+    setBands(historyRef.current.present)
+  }
+
+  // 全局撤销/重做快捷键（输入框内不拦截）
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const tag = (e.target as HTMLElement | null)?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return
+      const key = e.key.toLowerCase()
+      if (key === 'z') {
+        e.preventDefault()
+        if (e.shiftKey) {
+          historyRef.current.redo()
+        } else {
+          historyRef.current.undo()
+        }
+        setBands(historyRef.current.present)
+      } else if (key === 'y') {
+        e.preventDefault()
+        historyRef.current.redo()
+        setBands(historyRef.current.present)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   useEffect(() => {
     setHidReady(WebHidTransport.supported())
@@ -195,7 +242,9 @@ export default function App() {
         setDevice(connected)
         setStatus({})
         setDrafts({})
-        setBands(connected.kind === 'simulator' ? DEMO_BANDS : DEFAULT_BANDS)
+        const initial = connected.kind === 'simulator' ? DEMO_BANDS : DEFAULT_BANDS
+        historyRef.current.reset(initial)
+        setBands(initial)
         attach()
         await load(next)
         setPage('tune')
@@ -342,7 +391,13 @@ export default function App() {
               state={state}
               failed={failed}
               bands={bands}
-              onBandsChange={setBands}
+              onBandsChange={changeBands}
+              onBandsBegin={beginBands}
+              onBandsCommit={commitBands}
+              canUndo={historyRef.current.canUndo}
+              canRedo={historyRef.current.canRedo}
+              onUndo={undoBands}
+              onRedo={redoBands}
               dbRange={dbRange}
               onDbRange={setDbRange}
               status={status}
