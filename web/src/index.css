@@ -920,3 +920,25 @@ button:focus:not(:focus-visible),
   white-space: nowrap;
   border: 0;
 }
+
+/* 手机端提示页：只有一句话，不渲染桌面界面 */
+.gate {
+  width: 100%;
+  max-width: 30rem;
+  margin: 18vh auto 0;
+  padding: 0 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  text-align: center;
+}
+
+.gate strong {
+  font-size: 1.1875rem;
+  color: var(--glow);
+}
+
+.gate p {
+  color: var(--dim);
+  line-height: 1.8;
+}

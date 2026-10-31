@@ -22,6 +22,8 @@ export const COPY = {
   hintSim: '不插设备也能试全部功能',
   noHid: '当前浏览器不支持 WebHID，真机连接不可用；请改用 Chrome 或 Edge 113+ 桌面版。',
   mobile: '手机浏览器无法连接 USB 设备，请用电脑上的 Chrome / Edge 打开。',
+  mobileTitle: '请用电脑打开',
+  mobileWhy: '网页版靠 WebHID 直连 USB，手机浏览器没有这个能力，插转接头也不行。',
   simBanner: '模拟器模式：这里改动的是模拟数据，不会写入任何设备。',
   deviceGone: '设备已断开：请重新插拔后再次连接。',
 

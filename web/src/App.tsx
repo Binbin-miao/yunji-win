@@ -360,6 +360,17 @@ export default function App() {
 
   const statusText = device ? (device.kind === 'simulator' ? '模拟器' : '已连接') : '未连接'
 
+  // 手机上渲染整套桌面界面会破版，且 WebHID 本来就不存在：只给一句「请用电脑」
+  if (isMobile) {
+    return (
+      <div className="gate">
+        <strong>{COPY.mobileTitle}</strong>
+        <p>{COPY.mobile}</p>
+        <p className="hint">{COPY.mobileWhy}</p>
+      </div>
+    )
+  }
+
   return (
     <div className="shell">
       <aside className="rail">
