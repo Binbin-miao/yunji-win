@@ -1,4 +1,4 @@
-import type { ConnectedDevice, DeviceState, Transport } from './types'
+import type { ConnectedDevice, DeviceState, StateReadResult, Transport } from './types'
 import { DEVICE_MODELS } from '../data/devices'
 
 /** 模拟器：不下发任何硬件命令，状态存在内存里 */
@@ -30,8 +30,8 @@ export class SimulatorTransport implements Transport {
     /* 无状态可清理 */
   }
 
-  async readState(): Promise<DeviceState> {
-    return { ...this.state }
+  async readState(): Promise<StateReadResult> {
+    return { state: { ...this.state }, failed: [] }
   }
 
   async setVolume(raw: number): Promise<number> {

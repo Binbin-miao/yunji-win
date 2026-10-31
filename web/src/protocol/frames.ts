@@ -61,8 +61,11 @@ export const filterWriteFrame = (mode: number): number[] =>
 export const gainWriteFrame = (level: number): number[] =>
   writeFrame(CMD.gain, [clampInt(level, 0, 1)])
 
-/** 指示灯：01 18 01 <0|1> */
-export const ledWriteFrame = (on: boolean): number[] => writeFrame(CMD.led, [on ? 1 : 0])
+/** 指示灯：01 18 01 <value>（0 关；不同固件「开」的编码可能是 1 或 2） */
+export const ledValueFrame = (value: number): number[] =>
+  writeFrame(CMD.led, [clampInt(value, 0, 4)])
+
+export const ledWriteFrame = (on: boolean): number[] => ledValueFrame(on ? 1 : 0)
 
 /**
  * 声道平衡：左右两个包成对下发，衰减作用在被压低的那一侧。

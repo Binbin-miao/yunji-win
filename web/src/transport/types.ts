@@ -32,11 +32,18 @@ export interface DeviceState {
   balance: number
 }
 
+/** 读取结果：单项失败不影响其余参数 */
+export interface StateReadResult {
+  state: DeviceState
+  /** 读失败的字段，界面显示为「—」并提示 */
+  failed: Array<keyof DeviceState>
+}
+
 export interface Transport {
   readonly kind: TransportKind
   connect(): Promise<ConnectedDevice>
   disconnect(): Promise<void>
-  readState(): Promise<DeviceState>
+  readState(): Promise<StateReadResult>
   /** 以下写入均返回设备回读确认后的值 */
   setVolume(raw: number): Promise<number>
   setMic(raw: number): Promise<number>

@@ -1,4 +1,4 @@
-import type { ConnectedDevice, DeviceState, Transport } from './types'
+import type { ConnectedDevice, DeviceState, StateReadResult, Transport } from './types'
 import { DEVICE_MODELS, findModel } from '../data/devices'
 import {
   CMD,
@@ -11,7 +11,7 @@ import {
   gainWriteFrame,
   isResponseFor,
   le16,
-  ledWriteFrame,
+  ledValueFrame,
   micWriteFrame,
   readFrame,
   volumeWriteFrame,
@@ -38,6 +38,8 @@ export class WebHidTransport implements Transport {
   private device: HIDDevice | null = null
   private inbox: Uint8Array[] = []
   private queue: Promise<unknown> = Promise.resolve()
+  /** 灯光「开」命中的编码值，探测成功后本会话复用 */
+  private ledOnValue: number | null = null
   private readonly onReport = (ev: HIDInputReportEvent) => {
     this.inbox.push(new Uint8Array(ev.data.buffer, ev.data.byteOffset, ev.data.byteLength))
   }
@@ -101,11 +103,15 @@ export class WebHidTransport implements Transport {
   }
 
   /** 发一帧并等待 CMD 匹配的响应；不匹配的丢弃（可能是上一条的延迟回包） */
-  private async sendAndWait(cmd: number, args: number[] = []): Promise<Uint8Array> {
+  private async sendAndWait(
+    cmd: number,
+    args: number[] = [],
+    attempts = MAX_RETRY,
+  ): Promise<Uint8Array> {
     const device = this.requireDevice()
     const payload = buildPayload(readFrame(cmd, args), PAYLOAD_LEN)
 
-    for (let attempt = 0; attempt <= MAX_RETRY; attempt++) {
+    for (let attempt = 0; attempt <= attempts; attempt++) {
       this.inbox = []
       try {
         await device.sendReport(REPORT_ID, payload)
@@ -172,7 +178,14 @@ export class WebHidTransport implements Transport {
   }
 
   private async readLed(): Promise<boolean> {
-    return ((await this.sendAndWait(CMD.led, [1]))[3] ?? 0) !== 0
+    // 个别固件对被手机 App 改动过的灯效不回 [arg] 形式，退一步不带 arg 再试
+    let resp: Uint8Array
+    try {
+      resp = await this.sendAndWait(CMD.led, [1], 0)
+    } catch {
+      resp = await this.sendAndWait(CMD.led, [], 0)
+    }
+    return (resp[3] ?? 0) !== 0
   }
 
   private async readBalance(): Promise<number> {
@@ -181,16 +194,28 @@ export class WebHidTransport implements Transport {
     return Math.round(le16(r, 4) / 256) - Math.round(le16(l, 4) / 256)
   }
 
-  readState(): Promise<DeviceState> {
-    return this.enqueue(async () => ({
-      firmware: await this.readFirmware(),
-      volume: await this.readVolume(),
-      mic: await this.readMic(),
-      filter: await this.readFilter(),
-      gain: await this.readGain(),
-      led: await this.readLed(),
-      balance: await this.readBalance(),
-    }))
+  readState(): Promise<StateReadResult> {
+    return this.enqueue(async () => {
+      const failed: Array<keyof DeviceState> = []
+      const safe = async <T>(key: keyof DeviceState, fallback: T, run: () => Promise<T>): Promise<T> => {
+        try {
+          return await run()
+        } catch {
+          failed.push(key)
+          return fallback
+        }
+      }
+
+      const firmware = await safe('firmware', '(读取失败)', () => this.readFirmware())
+      const volume = await safe('volume', 0, () => this.readVolume())
+      const mic = await safe('mic', 0, () => this.readMic())
+      const filter = await safe('filter', 0, () => this.readFilter())
+      const gain = await safe('gain', 0, () => this.readGain())
+      const led = await safe('led', false, () => this.readLed())
+      const balance = await safe('balance', 0, () => this.readBalance())
+
+      return { state: { firmware, volume, mic, filter, gain, led, balance }, failed }
+    })
   }
 
   // ---- 写入（返回设备实际值，不一致由界面提示，不当作失败） ----
@@ -224,10 +249,25 @@ export class WebHidTransport implements Transport {
 
   setLed(on: boolean): Promise<boolean> {
     return this.enqueue(async () => {
-      // 桌面版此处不提交，但实测只发 01 18 01 01 时设备可能不落盘，补一条提交
-      await this.writeWithCommit(ledWriteFrame(on))
-      const back = await this.readUntil(async () => ((await this.readLed()) ? 1 : 0), on ? 1 : 0)
-      return back !== 0
+      // 与桌面版一致：只发 01 18 01 <value>，不补提交
+      // 手机 App 能调但桌面版偶尔调不动，说明「开」的编码并非固定为 1，
+      // 这里按 1 → 2 依次探测，命中后记住本次会话用哪个值。
+      if (!on) {
+        await this.sendRaw(ledValueFrame(0))
+        const back = await this.readUntil(async () => ((await this.readLed()) ? 1 : 0), 0)
+        return back !== 0
+      }
+
+      const candidates = this.ledOnValue !== null ? [this.ledOnValue] : [1, 2]
+      for (const value of candidates) {
+        await this.sendRaw(ledValueFrame(value))
+        const back = await this.readUntil(async () => ((await this.readLed()) ? 1 : 0), 1)
+        if (back !== 0) {
+          this.ledOnValue = value
+          return true
+        }
+      }
+      return false
     })
   }
 

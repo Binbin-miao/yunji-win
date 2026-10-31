@@ -26,6 +26,7 @@ export default function App() {
   const [hidReady, setHidReady] = useState(false)
   const [device, setDevice] = useState<ConnectedDevice | null>(null)
   const [state, setState] = useState<DeviceState | null>(null)
+  const [failed, setFailed] = useState<Array<keyof DeviceState>>([])
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const [reading, setReading] = useState(false)
@@ -68,7 +69,9 @@ export default function App() {
     setReading(true)
     setError(null)
     try {
-      setState(await t.readState())
+      const res = await t.readState()
+      setState(res.state)
+      setFailed(res.failed)
       setDrafts({})
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e))
@@ -149,8 +152,11 @@ export default function App() {
         return next
       })
       try {
-        const fresh = await t.readState()
-        if (session === sessionRef.current) setState(fresh)
+        const res = await t.readState()
+        if (session === sessionRef.current) {
+          setState(res.state)
+          setFailed(res.failed)
+        }
       } catch {
         /* 回读也失败时保持原样，错误提示已给出 */
       }
@@ -333,6 +339,13 @@ export default function App() {
         {!hidReady && <div className="banner">{isMobile ? COPY.mobile : COPY.noHid}</div>}
         {device?.kind === 'simulator' && <div className="banner sim">{COPY.simBanner}</div>}
         {error && <div className="banner error">{error}</div>}
+        {failed.length > 0 && (
+          <div className="banner">
+            以下参数读取失败：
+            {failed.map(k => COPY.param[k].label).join('、')}。其余参数可正常使用，可点「重新读取」重试，
+            或拔插设备后再连。
+          </div>
+        )}
 
         {device && (
           <section className="card">
@@ -458,7 +471,9 @@ export default function App() {
                 <div className="param-top">
                   <span className="param-label">{COPY.param.firmware.label}</span>
                 </div>
-                <strong className="param-value small">{state.firmware}</strong>
+                <strong className="param-value small">
+                  {failed.includes('firmware') ? '—' : state.firmware}
+                </strong>
                 <span className="param-hint">{COPY.param.firmware.hint}</span>
               </div>
             </div>
