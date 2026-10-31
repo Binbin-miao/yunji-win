@@ -8,6 +8,7 @@ import {
   addBand,
   bandAtPoint,
   dragBand,
+  freqLimits,
   hitBand,
   nudgeBand,
   removeBand,
@@ -244,7 +245,8 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, he
     const dy = y - drag.startY
     // 按住 Ctrl/⌘：按位移较大的方向锁定单轴
     const lock: LockAxis = e.ctrlKey || e.metaKey ? (Math.abs(dx) >= Math.abs(dy) ? 'gain' : 'freq') : null
-    const next = dragBand(drag.startBand, l, drag.startX, drag.startY, x, y, lock)
+    const limits = freqLimits(bandsRef.current, drag.index)
+    const next = dragBand(drag.startBand, l, drag.startX, drag.startY, x, y, lock, limits)
     onChange(replaceBand(bandsRef.current, drag.index, next))
   }
 
@@ -302,7 +304,8 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, he
     }
     if (!e.key.startsWith('Arrow')) return
     e.preventDefault()
-    onChange(replaceBand(bands, selected, nudgeBand(band, e.key, e.shiftKey)))
+    const limits = freqLimits(bands, selected)
+    onChange(replaceBand(bands, selected, nudgeBand(band, e.key, e.shiftKey, limits)))
   }
 
   return (

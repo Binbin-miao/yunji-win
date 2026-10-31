@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { COPY } from '../copy'
+import BandEditor from '../components/BandEditor'
 import EqChart from '../components/EqChart'
 import { DB_RANGES, type EqBand } from '../domain/eq'
-import { MAX_BANDS } from '../domain/eqEdit'
+import { MAX_BANDS, freqLimits, removeBand, replaceBand } from '../domain/eqEdit'
 import type { ConnectedDevice, DeviceState } from '../transport/types'
 import type { ParamKey, SliderKey, WriteStatus } from '../types/ui'
 
@@ -84,13 +85,32 @@ export default function TunePage({
         </p>
         <div className="bands">
           {bands.map((b, i) => (
-            <div className="band" key={`${b.freq}-${i}`}>
+            <button
+              type="button"
+              className={`band ${selected === i ? 'on' : ''}`}
+              key={`${b.freq}-${i}`}
+              onClick={() => setSelected(i)}
+              title={`第 ${i + 1} 段：${b.freq} Hz / ${b.gain} dB / Q ${b.q}`}
+            >
               <span className="band-i">{i + 1}</span>
               <span className="band-f">{b.freq >= 1000 ? `${b.freq / 1000}k` : b.freq}</span>
               <span className="band-g">{b.gain > 0 ? `+${b.gain}` : b.gain}</span>
-            </div>
+            </button>
           ))}
         </div>
+
+        {selected !== null && bands[selected] && (
+          <BandEditor
+            band={bands[selected]}
+            index={selected}
+            limits={freqLimits(bands, selected)}
+            onChange={band => onBandsChange(replaceBand(bands, selected, band))}
+            onDelete={() => {
+              onBandsChange(removeBand(bands, selected))
+              setSelected(null)
+            }}
+          />
+        )}
         <p className="hint">
           {device.kind === 'simulator'
             ? '模拟器示例曲线，改完不会写入任何设备'

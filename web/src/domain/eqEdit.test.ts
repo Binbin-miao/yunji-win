@@ -3,12 +3,14 @@ import type { EqBand } from './eq'
 import {
   MAX_BANDS,
   MAX_GAIN,
+  MIN_FREQ_GAP,
   addBand,
   bandAtPoint,
   clampBand,
   dbAtY,
   dragBand,
   freqAtX,
+  freqLimits,
   hitBand,
   nudgeBand,
   removeBand,
@@ -106,6 +108,47 @@ describe('命中检测', () => {
 
   it('点在空白处返回 -1', () => {
     expect(hitBand(bands, layout, xAtFreq(3000, layout), yAtDb(10, layout))).toBe(-1)
+  })
+})
+
+describe('相邻段限位', () => {
+  const bands = [band(60, 0.75, 0), band(120, 0.75, 0), band(1000, 0.75, 0)]
+
+  it('中间段被夹在左右邻居之间', () => {
+    const l = freqLimits(bands, 1)
+    expect(l.minFreq).toBeCloseTo(60 * MIN_FREQ_GAP, 6)
+    expect(l.maxFreq).toBeCloseTo(1000 / MIN_FREQ_GAP, 6)
+  })
+
+  it('首段只受下一段限制，末段只受上一段限制', () => {
+    expect(freqLimits(bands, 0).minFreq).toBe(20)
+    expect(freqLimits(bands, 0).maxFreq).toBeCloseTo(120 / MIN_FREQ_GAP, 6)
+    expect(freqLimits(bands, 2).minFreq).toBeCloseTo(120 * MIN_FREQ_GAP, 6)
+    expect(freqLimits(bands, 2).maxFreq).toBe(20000)
+  })
+
+  it('拖动超过邻居时被挡住，不会穿越到右边', () => {
+    const l: Layout = { width: 600, height: 300, range: 12 }
+    const start = bands[0]
+    const sx = xAtFreq(start.freq, l)
+    const sy = yAtDb(start.gain, l)
+    const moved = dragBand(start, l, sx, sy, sx + 5000, sy, null, freqLimits(bands, 0))
+    expect(moved.freq).toBeLessThanOrEqual(120)
+    expect(moved.freq).toBeGreaterThanOrEqual(60)
+  })
+
+  it('键盘右移也不会越过邻居', () => {
+    let current = bands[0]
+    for (let i = 0; i < 50; i++) {
+      current = nudgeBand(current, 'ArrowRight', true, freqLimits([current, bands[1], bands[2]], 0))
+    }
+    expect(current.freq).toBeLessThanOrEqual(120)
+  })
+
+  it('数值输入的超范围频率被夹到邻居之间', () => {
+    const clamped = clampBand(band(5000, 1, 0), freqLimits(bands, 1))
+    expect(clamped.freq).toBeLessThanOrEqual(Math.round(1000 / MIN_FREQ_GAP))
+    expect(clamped.freq).toBeGreaterThanOrEqual(Math.round(60 * MIN_FREQ_GAP))
   })
 })
 

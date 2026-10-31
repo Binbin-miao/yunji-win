@@ -69,10 +69,33 @@ const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v
 /** 增益靠近 0 时吸附，避免手抖留下 ±0.1 */
 export const snapGain = (g: number): number => (Math.abs(g) < SNAP_DB ? 0 : g)
 
+/** 相邻两段之间至少相差的倍数，防止挤在一起无法分辨 */
+export const MIN_FREQ_GAP = 1.02
+
+export interface FreqLimits {
+  minFreq: number
+  maxFreq: number
+}
+
+/**
+ * 某段可用的频率区间：夹在左右邻居之间，保持段的先后顺序。
+ * 拖拽与键盘微调都必须用它，否则能把第 1 段拖到第 8 段右边。
+ */
+export function freqLimits(bands: EqBand[], index: number): FreqLimits {
+  const prev = index > 0 ? bands[index - 1].freq : 0
+  const next = index >= 0 && index < bands.length - 1 ? bands[index + 1].freq : Infinity
+  const minFreq = prev > 0 ? Math.max(MIN_FREQ, prev * MIN_FREQ_GAP) : MIN_FREQ
+  const maxFreq = Number.isFinite(next) ? Math.min(MAX_FREQ, next / MIN_FREQ_GAP) : MAX_FREQ
+  // 极端情况下（邻居贴太近）保证区间不反转
+  return { minFreq: Math.min(minFreq, maxFreq), maxFreq: Math.max(minFreq, maxFreq) }
+}
+
 /** 把一段参数收进设备与界面都接受的范围内（不做吸附，吸附只在拖动时用） */
-export function clampBand(band: EqBand): EqBand {
+export function clampBand(band: EqBand, limits?: FreqLimits): EqBand {
+  const lo = limits ? Math.max(MIN_FREQ, limits.minFreq) : MIN_FREQ
+  const hi = limits ? Math.min(MAX_FREQ, limits.maxFreq) : MAX_FREQ
   return {
-    freq: Math.round(clamp(band.freq, MIN_FREQ, MAX_FREQ)),
+    freq: Math.round(clamp(band.freq, lo, hi)),
     q: Math.round(clamp(band.q, MIN_Q, MAX_Q) * 100) / 100,
     gain: Math.round(clamp(band.gain, -MAX_GAIN, MAX_GAIN) * 10) / 10,
   }
@@ -106,6 +129,7 @@ export function dragBand(
   curX: number,
   curY: number,
   lock: LockAxis,
+  limits?: FreqLimits,
 ): EqBand {
   const next = { ...start }
   // lock 表示「锁定哪个轴」：'freq' 时频率不动，只改增益；'gain' 反之
@@ -115,7 +139,7 @@ export function dragBand(
   if (lock !== 'gain') {
     next.gain = snapGain(dbAtY(yAtDb(start.gain, l) + (curY - startY), l))
   }
-  return clampBand(next)
+  return clampBand(next, limits)
 }
 
 /** 在某个像素位置插入新段（增益取该位置对应值） */
@@ -124,7 +148,12 @@ export function bandAtPoint(l: Layout, x: number, y: number): EqBand {
 }
 
 /** 键盘微调：方向键改频率/增益 */
-export function nudgeBand(band: EqBand, key: string, shift: boolean): EqBand {
+export function nudgeBand(
+  band: EqBand,
+  key: string,
+  shift: boolean,
+  limits?: FreqLimits,
+): EqBand {
   const next = { ...band }
   const gainStep = shift ? 1 : 0.1
   const freqFactor = shift ? 1.2 : 1.02
@@ -133,7 +162,7 @@ export function nudgeBand(band: EqBand, key: string, shift: boolean): EqBand {
   else if (key === 'ArrowLeft') next.freq /= freqFactor
   else if (key === 'ArrowRight') next.freq *= freqFactor
   else return band
-  return clampBand(next)
+  return clampBand(next, limits)
 }
 
 /** 滚轮调 Q */
