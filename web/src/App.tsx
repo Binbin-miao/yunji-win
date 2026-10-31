@@ -12,7 +12,7 @@ const isMobile = /Android|iPhone|iPad|iPod|Mobile/i.test(
   typeof navigator === 'undefined' ? '' : navigator.userAgent,
 )
 
-type WriteStatus = { kind: 'idle' | 'writing' | 'done' | 'error'; text?: string }
+type WriteStatus = { kind: 'idle' | 'writing' | 'done' | 'warn' | 'error'; text?: string }
 type SliderKey = 'volume' | 'mic' | 'balance'
 type ParamKey = SliderKey | 'filter' | 'gain' | 'led'
 
@@ -31,6 +31,7 @@ export default function App() {
   const [reading, setReading] = useState(false)
   const [transport, setTransport] = useState<Transport | null>(null)
   const [drafts, setDrafts] = useState<Partial<Record<SliderKey, number>>>({})
+  const [texts, setTexts] = useState<Partial<Record<SliderKey, string>>>({})
   const [status, setStatus] = useState<Partial<Record<ParamKey, WriteStatus>>>({})
 
   const debouncers = useRef<Partial<Record<SliderKey, Debouncer<number>>>>({})
@@ -82,45 +83,57 @@ export default function App() {
     if (!t) return
     const session = sessionRef.current
     setStatus(s => ({ ...s, [key]: { kind: 'writing' } }))
-    try {
-      let text = ''
-      if (key === 'volume') {
-        const back = await t.setVolume(value)
-        if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, volume: back } : s))
-        text = `已写入 ${volDisplay(back, chip)}`
-      } else if (key === 'mic') {
-        const back = await t.setMic(value)
-        if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, mic: back } : s))
-        text = `已写入 ${micDisplay(back)}`
-      } else if (key === 'balance') {
-        const back = await t.setBalance(value)
-        if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, balance: back } : s))
-        text = `已写入 ${balDisplay(back)}`
-      } else if (key === 'filter') {
-        const back = await t.setFilter(value)
-        if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, filter: back } : s))
-        text = '已写入'
-      } else if (key === 'gain') {
-        const back = await t.setGain(value)
-        if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, gain: back } : s))
-        text = '已写入'
+
+    const finish = (sent: number, back: number, describe: (v: number) => string) => {
+      if (session !== sessionRef.current) return
+      if (back === sent) {
+        setStatus(s => ({ ...s, [key]: { kind: 'done', text: `已写入 ${describe(back)}` } }))
       } else {
-        const back = await t.setLed(value !== 0)
-        if (session !== sessionRef.current) return
-        setState(s => (s ? { ...s, led: back } : s))
-        text = back ? '已开启' : '已关闭'
+        // 设备有量化或延迟，回读与写入值不同不算失败，但要如实告知
+        setStatus(s => ({
+          ...s,
+          [key]: { kind: 'warn', text: `已写入 ${describe(sent)}，设备回读 ${describe(back)}` },
+        }))
       }
       setDrafts(d => {
         const next = { ...d }
         if (key === 'volume' || key === 'mic' || key === 'balance') delete next[key]
         return next
       })
-      setStatus(s => ({ ...s, [key]: { kind: 'done', text } }))
+    }
+
+    try {
+      if (key === 'volume') {
+        const back = await t.setVolume(value)
+        if (session !== sessionRef.current) return
+        setState(s => (s ? { ...s, volume: back } : s))
+        finish(value, back, v => String(volDisplay(v, chip)))
+      } else if (key === 'mic') {
+        const back = await t.setMic(value)
+        if (session !== sessionRef.current) return
+        setState(s => (s ? { ...s, mic: back } : s))
+        finish(value, back, v => micDisplay(v))
+      } else if (key === 'balance') {
+        const back = await t.setBalance(value)
+        if (session !== sessionRef.current) return
+        setState(s => (s ? { ...s, balance: back } : s))
+        finish(value, back, v => balDisplay(v))
+      } else if (key === 'filter') {
+        const back = await t.setFilter(value)
+        if (session !== sessionRef.current) return
+        setState(s => (s ? { ...s, filter: back } : s))
+        finish(value, back, v => COPY.filterModes[v] ?? String(v))
+      } else if (key === 'gain') {
+        const back = await t.setGain(value)
+        if (session !== sessionRef.current) return
+        setState(s => (s ? { ...s, gain: back } : s))
+        finish(value, back, v => COPY.gainLevels[v] ?? String(v))
+      } else {
+        const back = await t.setLed(value !== 0)
+        if (session !== sessionRef.current) return
+        setState(s => (s ? { ...s, led: back } : s))
+        finish(value !== 0 ? 1 : 0, back ? 1 : 0, v => (v ? '开' : '关'))
+      }
     } catch (e) {
       if (session !== sessionRef.current) return
       const msg =
@@ -226,6 +239,19 @@ export default function App() {
     const raw =
       key === 'volume' ? volRaw(shown('volume'), chip) : Math.round(shown(key))
     debouncers.current[key]?.schedule(raw)
+  }
+
+  /** 手填数值：Enter 或失焦提交，越界夹到区间，非法输入丢弃 */
+  function commitText(key: SliderKey) {
+    const text = texts[key]
+    if (text === undefined) return
+    setTexts(t => ({ ...t, [key]: undefined }))
+    const n = Number(text)
+    if (!Number.isFinite(n)) return
+    const r = range(key)
+    const clamped = Math.max(r.min, Math.min(r.max, Math.round(n)))
+    slide(key, clamped)
+    debouncers.current[key]?.schedule(key === 'volume' ? volRaw(clamped, chip) : clamped)
   }
 
   function range(key: SliderKey) {
@@ -337,7 +363,23 @@ export default function App() {
                   <div className="param param-wide" key={key}>
                     <div className="param-top">
                       <span className="param-label">{COPY.param[key].label}</span>
-                      <strong className="param-value">{shown(key)}</strong>
+                      <input
+                        className="num"
+                        type="text"
+                        inputMode="numeric"
+                        value={texts[key] ?? String(shown(key))}
+                        disabled={status[key]?.kind === 'writing'}
+                        onChange={e => setTexts(t => ({ ...t, [key]: e.target.value }))}
+                        onBlur={() => commitText(key)}
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') e.currentTarget.blur()
+                          if (e.key === 'Escape') {
+                            setTexts(t => ({ ...t, [key]: undefined }))
+                            e.currentTarget.blur()
+                          }
+                        }}
+                        aria-label={`${COPY.param[key].label} 数值`}
+                      />
                       {statusNode(key)}
                     </div>
                     <input

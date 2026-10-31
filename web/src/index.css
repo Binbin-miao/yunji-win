@@ -292,8 +292,37 @@ body {
   color: var(--cyan);
 }
 
+.write.warn {
+  color: var(--amber);
+}
+
 .write.error {
   color: var(--red);
+}
+
+/* 可手填的数值 */
+.num {
+  width: 58px;
+  margin-left: auto;
+  padding: 4px 8px;
+  text-align: right;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(11, 8, 16, 0.6);
+  color: var(--ink);
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 13px;
+  outline: none;
+  transition: 0.15s;
+}
+
+.num:hover {
+  border-color: var(--line2);
+}
+
+.num:focus {
+  border-color: rgba(201, 166, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(161, 117, 240, 0.15);
 }
 
 /* ---------- 参数网格 ---------- */

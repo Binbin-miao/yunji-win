@@ -130,6 +130,19 @@ export class WebHidTransport implements Transport {
     await this.sendRaw(commitFrame())
   }
 
+  /**
+   * 回读校验：设备写入后有量化与延迟，单次读可能拿到陈旧值。
+   * 最多读 3 次（间隔 40ms），返回最后一次读到的值，由调用方决定是否提示。
+   */
+  private async readUntil(getter: () => Promise<number>, expected: number): Promise<number> {
+    let last = await getter()
+    for (let i = 0; i < 2 && last !== expected; i++) {
+      await sleep(40)
+      last = await getter()
+    }
+    return last
+  }
+
   // ---- 单项读取（内部使用，调用方需在队列内） ----
   private async readFirmware(): Promise<string> {
     const resp = await this.sendAndWait(CMD.firmware)
@@ -180,58 +193,48 @@ export class WebHidTransport implements Transport {
     }))
   }
 
-  // ---- 写入 ----
+  // ---- 写入（返回设备实际值，不一致由界面提示，不当作失败） ----
   setVolume(raw: number): Promise<number> {
     return this.enqueue(async () => {
       await this.writeWithCommit(volumeWriteFrame(raw))
-      const back = await this.readVolume()
-      if (back !== raw) throw new TransportError(`设备回读为 ${back}，与写入值 ${raw} 不一致`, 'verify')
-      return back
+      return this.readUntil(() => this.readVolume(), raw)
     })
   }
 
   setMic(raw: number): Promise<number> {
     return this.enqueue(async () => {
       await this.writeWithCommit(micWriteFrame(raw))
-      const back = await this.readMic()
-      if (back !== raw) throw new TransportError(`设备回读为 ${back}，与写入值 ${raw} 不一致`, 'verify')
-      return back
+      return this.readUntil(() => this.readMic(), raw)
     })
   }
 
   setFilter(mode: number): Promise<number> {
     return this.enqueue(async () => {
       await this.sendRaw(filterWriteFrame(mode))
-      const back = await this.readFilter()
-      if (back !== mode) throw new TransportError(`设备回读为 ${back}，与写入值 ${mode} 不一致`, 'verify')
-      return back
+      return this.readUntil(() => this.readFilter(), mode)
     })
   }
 
   setGain(level: number): Promise<number> {
     return this.enqueue(async () => {
       await this.sendRaw(gainWriteFrame(level))
-      const back = await this.readGain()
-      if (back !== level) throw new TransportError(`设备回读为 ${back}，与写入值 ${level} 不一致`, 'verify')
-      return back
+      return this.readUntil(() => this.readGain(), level)
     })
   }
 
   setLed(on: boolean): Promise<boolean> {
     return this.enqueue(async () => {
-      await this.sendRaw(ledWriteFrame(on))
-      const back = await this.readLed()
-      if (back !== on) throw new TransportError('指示灯状态与写入值不一致', 'verify')
-      return back
+      // 桌面版此处不提交，但实测只发 01 18 01 01 时设备可能不落盘，补一条提交
+      await this.writeWithCommit(ledWriteFrame(on))
+      const back = await this.readUntil(async () => ((await this.readLed()) ? 1 : 0), on ? 1 : 0)
+      return back !== 0
     })
   }
 
   setBalance(raw: number): Promise<number> {
     return this.enqueue(async () => {
       for (const frame of balanceWriteFrames(raw)) await this.sendRaw(frame)
-      const back = await this.readBalance()
-      if (back !== raw) throw new TransportError(`设备回读为 ${back}，与写入值 ${raw} 不一致`, 'verify')
-      return back
+      return this.readUntil(() => this.readBalance(), raw)
     })
   }
 }
