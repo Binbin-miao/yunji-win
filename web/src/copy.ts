@@ -1,0 +1,35 @@
+/** 全站文案表：组件不得内联硬编码说明文字 */
+export const COPY = {
+  appName: '云姬 · 网页版调音台',
+  tagline: '浏览器直连 USB 设备，免安装',
+  connectReal: '连接真机',
+  connectSim: '试用模拟器',
+  disconnect: '断开',
+  reread: '重新读取',
+  hintReal: '浏览器弹窗选设备，需授权访问',
+  hintSim: '不插设备也能试全部功能',
+  noHid: '当前浏览器不支持 WebHID，真机连接不可用；请改用 Chrome 或 Edge 113+ 桌面版。',
+  mobile: '手机浏览器无法连接 USB 设备，请用电脑上的 Chrome / Edge 打开。',
+  simBanner: '模拟器模式：这里改动的是模拟数据，不会写入任何设备。',
+  deviceGone: '设备已断开：请重新插拔后再次连接。',
+  reading: '正在读取设备状态…',
+  sectionModels: '支持的机型',
+  sectionModelsHint: '旋润系列走厂商控制传输，浏览器通道暂不支持',
+  sectionState: '设备状态',
+  sectionStateHint: '只读，修改功能将在后续版本接入',
+  supported: '浏览器可直连',
+  unsupported: '请用桌面版',
+
+  param: {
+    firmware: { label: '固件版本', hint: '设备当前固件，与官方 App 一致' },
+    volume: { label: '音量', hint: '满量程随芯片不同，数值越大越响' },
+    mic: { label: '麦克风', hint: '麦克风回放音量，范围 −30 到 +30' },
+    filter: { label: '滤波器', hint: '数字滤波器的滚降与相位模式' },
+    gain: { label: '增益', hint: '输出增益档位，高档更响也更易失真' },
+    led: { label: '指示灯', hint: '设备机身灯效开关' },
+    balance: { label: '声道平衡', hint: '负值偏左、正值偏右' },
+  },
+
+  filterModes: ['低延迟陡降', '相位补偿陡降', '低延迟缓降', '相位补偿缓降', '无过采样'],
+  gainLevels: ['低增益', '高增益'],
+} as const
