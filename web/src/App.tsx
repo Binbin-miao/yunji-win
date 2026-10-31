@@ -3,6 +3,8 @@ import { COPY } from './copy'
 import { DEVICE_MODELS } from './data/devices'
 import { createDebouncer, type Debouncer } from './domain/commit'
 import { balDisplay, micDisplay, volBounds, volDisplay, volRaw } from './domain/params'
+import { DB_RANGES, DEFAULT_BANDS, DEMO_BANDS, type EqBand } from './domain/eq'
+import EqChart from './components/EqChart'
 import { SimulatorTransport } from './transport/simulator'
 import { WebHidTransport } from './transport/webhid'
 import { STAGE_TEXT, TransportError } from './transport/errors'
@@ -34,6 +36,8 @@ export default function App() {
   const [drafts, setDrafts] = useState<Partial<Record<SliderKey, number>>>({})
   const [texts, setTexts] = useState<Partial<Record<SliderKey, string>>>({})
   const [status, setStatus] = useState<Partial<Record<ParamKey, WriteStatus>>>({})
+  const [bands, setBands] = useState<EqBand[]>(DEFAULT_BANDS)
+  const [dbRange, setDbRange] = useState<(typeof DB_RANGES)[number]>(12)
 
   const debouncers = useRef<Partial<Record<SliderKey, Debouncer<number>>>>({})
   /** 每次连接/断开自增，用来丢弃上一 session 的异步回调 */
@@ -189,6 +193,8 @@ export default function App() {
         setDevice(connected)
         setStatus({})
         setDrafts({})
+        // 模拟器给一条示例曲线；真机暂时用平直曲线（设备内 EQ 读取在 09 号实现）
+        setBands(connected.kind === 'simulator' ? DEMO_BANDS : DEFAULT_BANDS)
         attach()
         await load(next)
       } catch (e) {
@@ -360,6 +366,42 @@ export default function App() {
                 {device.model ? `${device.model.vendor} · ${device.model.name}` : '未知品牌'}
               </span>
             </div>
+          </section>
+        )}
+
+        {device && (
+          <section className="card">
+            <div className="card-head">
+              <h2>参数均衡器</h2>
+              <span className="hint">proEQ · 8 段峰值 · 48 kHz 显示域</span>
+              <div className="spacer" />
+              <div className="chips">
+                {DB_RANGES.map(r => (
+                  <button
+                    key={r}
+                    className={`chip ${dbRange === r ? 'on' : ''}`}
+                    onClick={() => setDbRange(r)}
+                  >
+                    ±{r} dB
+                  </button>
+                ))}
+              </div>
+            </div>
+            <EqChart bands={bands} range={dbRange} />
+            <div className="bands">
+              {bands.map((b, i) => (
+                <div className="band" key={`${b.freq}-${i}`}>
+                  <span className="band-i">{i + 1}</span>
+                  <span className="band-f">{b.freq >= 1000 ? `${b.freq / 1000}k` : b.freq}</span>
+                  <span className="band-g">{b.gain > 0 ? `+${b.gain}` : b.gain}</span>
+                </div>
+              ))}
+            </div>
+            <p className="hint">
+              {device.kind === 'simulator'
+                ? '模拟器示例曲线；真机上此处显示设备内 EQ'
+                : '设备内 EQ 读取将在写入功能接入后同步，当前显示为平直曲线'}
+            </p>
           </section>
         )}
 
