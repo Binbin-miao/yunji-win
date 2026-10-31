@@ -19,6 +19,8 @@ interface Props {
   canRedo: boolean
   onUndo: () => void
   onRedo: () => void
+  eqStatus: WriteStatus
+  onWriteEq: () => void
   dbRange: (typeof DB_RANGES)[number]
   onDbRange: (r: (typeof DB_RANGES)[number]) => void
   status: Partial<Record<ParamKey, WriteStatus>>
@@ -44,6 +46,8 @@ export default function TunePage({
   canRedo,
   onUndo,
   onRedo,
+  eqStatus,
+  onWriteEq,
   dbRange,
   onDbRange,
   status,
@@ -57,6 +61,7 @@ export default function TunePage({
   apply,
 }: Props) {
   const [selected, setSelected] = useState<number | null>(null)
+  const [confirming, setConfirming] = useState(false)
 
   const statusNode = (key: ParamKey) => {
     const s = status[key]
@@ -81,6 +86,14 @@ export default function TunePage({
           <button className="chip" onClick={onRedo} disabled={!canRedo} title="重做 (Ctrl+Shift+Z)">
             重做
           </button>
+          <button
+            className="btn"
+            onClick={() => setConfirming(true)}
+            disabled={eqStatus.kind === 'writing' || device.kind === 'simulator'}
+            title={device.kind === 'simulator' ? '模拟器不写入设备' : '把当前 8 段写入设备'}
+          >
+            {eqStatus.kind === 'writing' ? '写入中…' : '写入设备'}
+          </button>
           <div className="chips">
             {DB_RANGES.map(r => (
               <button key={r} className={`chip ${dbRange === r ? 'on' : ''}`} onClick={() => onDbRange(r)}>
@@ -89,6 +102,29 @@ export default function TunePage({
             ))}
           </div>
         </div>
+        {confirming && (
+          <div className="confirm">
+            <span>将把当前 8 段写入设备并覆盖现有 EQ，写入后设备会短暂断音。</span>
+            <button
+              className="chip"
+              onClick={() => {
+                setConfirming(false)
+                onWriteEq()
+              }}
+            >
+              确认写入
+            </button>
+            <button className="chip" onClick={() => setConfirming(false)}>
+              取消
+            </button>
+          </div>
+        )}
+        {eqStatus.kind !== 'idle' && eqStatus.kind !== 'writing' && (
+          <div className={`banner ${eqStatus.kind === 'error' ? 'error' : 'sim'}`}>
+            {eqStatus.text ?? (eqStatus.kind === 'done' ? '已写入设备' : '写入失败')}
+          </div>
+        )}
+
         <EqChart
           bands={bands}
           range={dbRange}

@@ -17,6 +17,8 @@ import {
   volumeWriteFrame,
 } from '../protocol/frames'
 import { TransportError } from './errors'
+import type { EqBand } from '../domain/eq'
+import { eqApplyFrame, eqPackets } from '../domain/eqWrite'
 
 /**
  * 真机：WebHID 直连。
@@ -219,9 +221,14 @@ export class WebHidTransport implements Transport {
   }
 
   // ---- 写入（返回设备实际值，不一致由界面提示，不当作失败） ----
+  /** 写值 → 提交，不含回读；只能在队列内调用 */
+  private async applyVolume(raw: number): Promise<void> {
+    await this.writeWithCommit(volumeWriteFrame(raw))
+  }
+
   setVolume(raw: number): Promise<number> {
     return this.enqueue(async () => {
-      await this.writeWithCommit(volumeWriteFrame(raw))
+      await this.applyVolume(raw)
       return this.readUntil(() => this.readVolume(), raw)
     })
   }
@@ -275,6 +282,31 @@ export class WebHidTransport implements Transport {
     return this.enqueue(async () => {
       for (const frame of balanceWriteFrames(raw)) await this.sendRaw(frame)
       return this.readUntil(() => this.readBalance(), raw)
+    })
+  }
+
+  /**
+   * 写入 8 段 EQ：
+   * 逐段写（段间 5ms）→ 发 0x0A 生效 → 重设一次音量触发 DSP 刷新（官方行为）。
+   * 生效确认失败不抛错：参数已进设备，只是刷新没确认上。
+   */
+  setEq(bands: EqBand[]): Promise<{ dspRefreshed: boolean }> {
+    return this.enqueue(async () => {
+      for (const packet of eqPackets(bands)) {
+        await this.sendRaw(packet)
+        await sleep(5)
+      }
+      await this.sendRaw(eqApplyFrame())
+
+      try {
+        const vol = await this.readVolume()
+        await sleep(10)
+        await this.applyVolume(vol)
+        return { dspRefreshed: true }
+      } catch {
+        // 参数已进设备，只是刷新没确认上；两者提示不同，不能谎报成功
+        return { dspRefreshed: false }
+      }
     })
   }
 }

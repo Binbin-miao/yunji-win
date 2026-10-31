@@ -63,4 +63,8 @@ export class SimulatorTransport implements Transport {
     this.state = { ...this.state, balance: raw }
     return raw
   }
+
+  async setEq(): Promise<{ dspRefreshed: boolean }> {
+    return { dspRefreshed: true }
+  }
 }

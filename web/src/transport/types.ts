@@ -51,4 +51,6 @@ export interface Transport {
   setGain(level: number): Promise<number>
   setLed(on: boolean): Promise<boolean>
   setBalance(raw: number): Promise<number>
+  /** 写入 8 段 EQ 并触发生效；dspRefreshed=false 表示参数已写入但刷新未确认 */
+  setEq(bands: import('../domain/eq').EqBand[]): Promise<{ dspRefreshed: boolean }>
 }

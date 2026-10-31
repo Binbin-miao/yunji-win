@@ -47,6 +47,7 @@ export default function App() {
   const [bands, setBands] = useState<EqBand[]>(DEFAULT_BANDS)
   const historyRef = useRef<History<EqBand[]>>(createHistory<EqBand[]>(DEFAULT_BANDS))
   const [dbRange, setDbRange] = useState<(typeof DB_RANGES)[number]>(12)
+  const [eqStatus, setEqStatus] = useState<WriteStatus>({ kind: 'idle' })
 
   const debouncers = useRef<Partial<Record<SliderKey, Debouncer<number>>>>({})
   const sessionRef = useRef(0)
@@ -324,6 +325,28 @@ export default function App() {
     setTexts(t => ({ ...t, [key]: value }))
   }
 
+  async function writeEq() {
+    const t = transportRef.current
+    if (!t) return
+    setEqStatus({ kind: 'writing' })
+    try {
+      const result = await t.setEq(bands)
+      setEqStatus(
+        result.dspRefreshed
+          ? { kind: 'done', text: '已写入设备并生效' }
+          : { kind: 'warn', text: '参数已写入，但生效刷新未确认，可用官方 App 复核' },
+      )
+    } catch (e) {
+      const msg =
+        e instanceof TransportError
+          ? `${STAGE_TEXT[e.stage]}：${e.message}`
+          : e instanceof Error
+            ? e.message
+            : String(e)
+      setEqStatus({ kind: 'error', text: msg })
+    }
+  }
+
   const statusText = device ? (device.kind === 'simulator' ? '模拟器' : '已连接') : '未连接'
 
   return (
@@ -398,6 +421,8 @@ export default function App() {
               canRedo={historyRef.current.canRedo}
               onUndo={undoBands}
               onRedo={redoBands}
+              eqStatus={eqStatus}
+              onWriteEq={writeEq}
               dbRange={dbRange}
               onDbRange={setDbRange}
               status={status}

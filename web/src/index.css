@@ -344,6 +344,20 @@ body {
   margin: 2px 0 10px;
 }
 
+.confirm {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  border: 1px solid rgba(232, 183, 90, 0.35);
+  background: rgba(232, 183, 90, 0.08);
+  border-radius: 11px;
+  font-size: 12.5px;
+  color: var(--amber);
+}
+
 .bands {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
