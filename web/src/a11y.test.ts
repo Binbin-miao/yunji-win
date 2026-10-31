@@ -13,6 +13,13 @@ const chartSource = read('./components/EqChart.tsx')
  */
 
 describe('无障碍与缩放', () => {
+  // 这些断言都在「读到的内容」上做匹配：读空了会全部真空通过，
+  // 所以先钉死长度，读不到就红。
+  it('确实读到了源码，读空不算通过', () => {
+    expect(css.length).toBeGreaterThan(1000)
+    expect(chartSource.length).toBeGreaterThan(1000)
+  })
+
   it('样式里不再出现 px 字号，系统字号放大才能生效', () => {
     const px = css.match(/font-size:\s*[\d.]+px/g) ?? []
     expect(px, `仍有 px 字号：${px.join(', ')}`).toEqual([])

@@ -55,3 +55,6 @@ assets-override/
 
 # Release artifacts
 *.zip
+
+# 截图与抓取产物
+mock/

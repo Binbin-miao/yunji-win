@@ -1,0 +1,15 @@
+#!/bin/sh
+# 提交前跑一遍网页版检查（tsc + vitest + oxlint）。
+# 只有改动到 web/ 或 docs/web/ 才拦；纯文档、纯 Python 提交直接放行。
+# 启用：git config core.hooksPath .githooks
+set -e
+
+root=$(git rev-parse --show-toplevel)
+staged=$(git diff --cached --name-only --diff-filter=ACM | grep -E '^(web/|docs/web/)' || true)
+
+if [ -z "$staged" ]; then
+  exit 0
+fi
+
+echo "[pre-commit] 检测到网页版改动，跑 tsc + vitest + oxlint…"
+npm --prefix "$root/web" run check
