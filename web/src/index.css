@@ -675,3 +675,70 @@ body {
     height: 36px;
   }
 }
+
+/* ---------- 预设 ---------- */
+.text {
+  flex: 1;
+  min-width: 200px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(11, 8, 16, 0.6);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 13px;
+  outline: none;
+}
+
+.text:focus {
+  border-color: rgba(201, 166, 255, 0.6);
+}
+
+.text.small {
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.warn-text {
+  color: var(--amber);
+  margin-top: 8px;
+}
+
+.preset-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.preset {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+}
+
+.preset-main {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+
+.preset-name {
+  font-size: 13.5px;
+}
+
+.preset-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.mini-curve {
+  flex: none;
+  border-radius: 6px;
+  background: rgba(11, 8, 16, 0.5);
+}

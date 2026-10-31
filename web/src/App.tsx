@@ -46,6 +46,8 @@ export default function App() {
   const [status, setStatus] = useState<Partial<Record<ParamKey, WriteStatus>>>({})
   const [bands, setBands] = useState<EqBand[]>(DEFAULT_BANDS)
   const historyRef = useRef<History<EqBand[]>>(createHistory<EqBand[]>(DEFAULT_BANDS))
+  /** 地址里指定了页签时，连接后不自动跳到调音页 */
+  const pinnedPage = useRef(false)
   const [dbRange, setDbRange] = useState<(typeof DB_RANGES)[number]>(12)
   const [eqStatus, setEqStatus] = useState<WriteStatus>({ kind: 'idle' })
 
@@ -248,7 +250,7 @@ export default function App() {
         setBands(initial)
         attach()
         await load(next)
-        setPage('tune')
+        if (!pinnedPage.current) setPage('tune')
       } catch (e) {
         setError(e instanceof Error ? e.message : String(e))
       } finally {
@@ -257,6 +259,15 @@ export default function App() {
     },
     [attach, load],
   )
+
+  // 开发/演示用：?page=presets 直达某个页签
+  useEffect(() => {
+    const target = new URLSearchParams(window.location.search).get('page')
+    if (target === 'connect' || target === 'tune' || target === 'presets' || target === 'about') {
+      setPage(target)
+      pinnedPage.current = true
+    }
+  }, [])
 
   // 开发/演示用：地址带 ?sim=1 直接进模拟器
   const autoSim = useRef(false)
@@ -452,7 +463,16 @@ export default function App() {
             </section>
           ))}
 
-        {page === 'presets' && <PresetsPage />}
+        {page === 'presets' && (
+          <PresetsPage
+            bands={bands}
+            deviceName={device?.name ?? null}
+            onApply={next => {
+              changeBands(next, false)
+              setPage('tune')
+            }}
+          />
+        )}
         {page === 'about' && <AboutPage device={device} state={state} failed={failed} />}
       </main>
     </div>
