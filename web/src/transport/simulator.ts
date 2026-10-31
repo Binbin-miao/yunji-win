@@ -38,4 +38,29 @@ export class SimulatorTransport implements Transport {
     this.state = { ...this.state, volume: raw }
     return raw
   }
+
+  async setMic(raw: number): Promise<number> {
+    this.state = { ...this.state, mic: raw }
+    return raw
+  }
+
+  async setFilter(mode: number): Promise<number> {
+    this.state = { ...this.state, filter: mode }
+    return mode
+  }
+
+  async setGain(level: number): Promise<number> {
+    this.state = { ...this.state, gain: level }
+    return level
+  }
+
+  async setLed(on: boolean): Promise<boolean> {
+    this.state = { ...this.state, led: on }
+    return on
+  }
+
+  async setBalance(raw: number): Promise<number> {
+    this.state = { ...this.state, balance: raw }
+    return raw
+  }
 }

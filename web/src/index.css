@@ -301,6 +301,7 @@ body {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(168px, 1fr));
   gap: 10px;
+  align-items: start;
 }
 
 .param {
@@ -331,6 +332,57 @@ body {
   font-size: 11px;
   color: var(--faint);
   line-height: 1.6;
+}
+
+.param-wide {
+  grid-column: span 2;
+}
+
+.param-top {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.param-top .param-value {
+  margin-left: auto;
+}
+
+.param-value.small {
+  font-size: 15px;
+  background: none;
+  color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 2px 0 4px;
+}
+
+.chip {
+  font-size: 11.5px;
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--dim);
+  cursor: pointer;
+  font-family: inherit;
+  transition: 0.15s;
+}
+
+.chip:hover {
+  border-color: var(--line2);
+  color: var(--ink);
+}
+
+.chip.on {
+  border-color: var(--line2);
+  color: var(--glow);
+  background: rgba(161, 117, 240, 0.16);
 }
 
 /* ---------- 机型网格 ---------- */

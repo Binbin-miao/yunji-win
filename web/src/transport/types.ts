@@ -37,6 +37,11 @@ export interface Transport {
   connect(): Promise<ConnectedDevice>
   disconnect(): Promise<void>
   readState(): Promise<DeviceState>
-  /** 写入音量（原始值），返回设备回读确认后的值 */
+  /** 以下写入均返回设备回读确认后的值 */
   setVolume(raw: number): Promise<number>
+  setMic(raw: number): Promise<number>
+  setFilter(mode: number): Promise<number>
+  setGain(level: number): Promise<number>
+  setLed(on: boolean): Promise<boolean>
+  setBalance(raw: number): Promise<number>
 }

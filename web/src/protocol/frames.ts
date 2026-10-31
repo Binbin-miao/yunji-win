@@ -34,6 +34,7 @@ export function buildPayload(body: number[], payloadLen = PAYLOAD_LEN): Uint8Arr
 }
 
 const i16le = (v: number): [number, number] => [v & 0xff, (v >> 8) & 0xff]
+const clampInt = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.trunc(v)))
 
 /** 读请求：80 <cmd> [args...] */
 export const readFrame = (cmd: number, args: number[] = []): number[] => [0x80, cmd, ...args]
@@ -43,8 +44,39 @@ export function writeFrame(cmd: number, payload: number[]): number[] {
   return [DIR_WRITE, cmd, payload.length, ...payload]
 }
 
-/** 音量写入帧：01 03 02 <lo> <hi>（值 = level × 256） */
-export const volumeWriteFrame = (raw: number): number[] => writeFrame(CMD.volume, i16le(raw * 256))
+/** 音量写入帧：01 03 02 <lo> <hi>（值 = level × 256）
+ *  量程随芯片不同（cb5100 −60..0 / cb1200 −8..4），由 domain/params 的 volRaw 负责钳制 */
+export const volumeWriteFrame = (raw: number): number[] =>
+  writeFrame(CMD.volume, i16le(Math.trunc(raw) * 256))
+
+/** 麦克风写入帧：01 02 02 <lo> <hi>，写完需要提交 */
+export const micWriteFrame = (raw: number): number[] =>
+  writeFrame(CMD.mic, i16le(clampInt(raw, -30, 30) * 256))
+
+/** 滤波器：01 11 01 <mode>，不需要提交 */
+export const filterWriteFrame = (mode: number): number[] =>
+  writeFrame(CMD.filter, [clampInt(mode, 0, 4)])
+
+/** 增益档位：01 19 01 <level> */
+export const gainWriteFrame = (level: number): number[] =>
+  writeFrame(CMD.gain, [clampInt(level, 0, 1)])
+
+/** 指示灯：01 18 01 <0|1> */
+export const ledWriteFrame = (on: boolean): number[] => writeFrame(CMD.led, [on ? 1 : 0])
+
+/**
+ * 声道平衡：左右两个包成对下发，衰减作用在被压低的那一侧。
+ * 形如 [01 16 04 <arg> <lo> <hi>]，arg=0 为左、1 为右。
+ */
+export function balanceWriteFrames(raw: number): number[][] {
+  const v = Math.max(-20, Math.min(20, Math.trunc(raw)))
+  const att = i16le(-Math.abs(v) * 256)
+  const left = [DIR_WRITE, CMD.balance, 4, 0, 0, 0]
+  const right = [DIR_WRITE, CMD.balance, 4, 1, 0, 0]
+  if (v > 0) [left[4], left[5]] = att
+  else if (v < 0) [right[4], right[5]] = att
+  return [left, right]
+}
 
 /** 提交帧：01 04 00 */
 export const commitFrame = (): number[] => writeFrame(CMD.commit, [])

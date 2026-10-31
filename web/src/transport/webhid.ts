@@ -4,10 +4,15 @@ import {
   CMD,
   PAYLOAD_LEN,
   REPORT_ID,
+  balanceWriteFrames,
   buildPayload,
   commitFrame,
+  filterWriteFrame,
+  gainWriteFrame,
   isResponseFor,
   le16,
+  ledWriteFrame,
+  micWriteFrame,
   readFrame,
   volumeWriteFrame,
 } from '../protocol/frames'
@@ -118,54 +123,115 @@ export class WebHidTransport implements Transport {
     throw new TransportError(`命令 0x${cmd.toString(16)} 无响应`, 'read')
   }
 
-  private async readVolumeRaw(): Promise<number> {
-    const resp = await this.sendAndWait(CMD.volume)
-    return Math.round(le16(resp, 3) / 256)
+  /** 写值 → 10ms → 提交（只有需要提交的参数走这条） */
+  private async writeWithCommit(frame: number[]): Promise<void> {
+    await this.sendRaw(frame)
+    await sleep(WRITE_GAP)
+    await this.sendRaw(commitFrame())
   }
 
-  /** 写入音量并回读校验，返回设备实际值 */
+  // ---- 单项读取（内部使用，调用方需在队列内） ----
+  private async readFirmware(): Promise<string> {
+    const resp = await this.sendAndWait(CMD.firmware)
+    let out = ''
+    for (let i = 3; i < resp.length; i++) {
+      const b = resp[i]
+      if (b === 0 || !(b === 0x2e || (b >= 0x30 && b <= 0x39))) break
+      out += String.fromCharCode(b)
+    }
+    return out || '(空)'
+  }
+
+  private async readVolume(): Promise<number> {
+    return Math.round(le16(await this.sendAndWait(CMD.volume), 3) / 256)
+  }
+
+  private async readMic(): Promise<number> {
+    return Math.round(le16(await this.sendAndWait(CMD.mic), 3) / 256)
+  }
+
+  private async readFilter(): Promise<number> {
+    return (await this.sendAndWait(CMD.filter))[3] ?? 0
+  }
+
+  private async readGain(): Promise<number> {
+    return (await this.sendAndWait(CMD.gain))[3] ?? 0
+  }
+
+  private async readLed(): Promise<boolean> {
+    return ((await this.sendAndWait(CMD.led, [1]))[3] ?? 0) !== 0
+  }
+
+  private async readBalance(): Promise<number> {
+    const l = await this.sendAndWait(CMD.balance, [4, 0])
+    const r = await this.sendAndWait(CMD.balance, [4, 1])
+    return Math.round(le16(r, 4) / 256) - Math.round(le16(l, 4) / 256)
+  }
+
+  readState(): Promise<DeviceState> {
+    return this.enqueue(async () => ({
+      firmware: await this.readFirmware(),
+      volume: await this.readVolume(),
+      mic: await this.readMic(),
+      filter: await this.readFilter(),
+      gain: await this.readGain(),
+      led: await this.readLed(),
+      balance: await this.readBalance(),
+    }))
+  }
+
+  // ---- 写入 ----
   setVolume(raw: number): Promise<number> {
     return this.enqueue(async () => {
-      await this.sendRaw(volumeWriteFrame(raw))
-      await sleep(WRITE_GAP)
-      await this.sendRaw(commitFrame())
-
-      const back = await this.readVolumeRaw()
-      if (back !== raw) {
-        throw new TransportError(`设备回读为 ${back}，与写入值 ${raw} 不一致`, 'verify')
-      }
+      await this.writeWithCommit(volumeWriteFrame(raw))
+      const back = await this.readVolume()
+      if (back !== raw) throw new TransportError(`设备回读为 ${back}，与写入值 ${raw} 不一致`, 'verify')
       return back
     })
   }
 
-  readState(): Promise<DeviceState> {
+  setMic(raw: number): Promise<number> {
     return this.enqueue(async () => {
-      const firmwareResp = await this.sendAndWait(CMD.firmware)
-      let firmware = ''
-      for (let i = 3; i < firmwareResp.length; i++) {
-        const b = firmwareResp[i]
-        if (b === 0 || !(b === 0x2e || (b >= 0x30 && b <= 0x39))) break
-        firmware += String.fromCharCode(b)
-      }
+      await this.writeWithCommit(micWriteFrame(raw))
+      const back = await this.readMic()
+      if (back !== raw) throw new TransportError(`设备回读为 ${back}，与写入值 ${raw} 不一致`, 'verify')
+      return back
+    })
+  }
 
-      const volume = await this.readVolumeRaw()
-      const micResp = await this.sendAndWait(CMD.mic)
-      const filterResp = await this.sendAndWait(CMD.filter)
-      const gainResp = await this.sendAndWait(CMD.gain)
-      const ledResp = await this.sendAndWait(CMD.led, [1])
-      const balL = await this.sendAndWait(CMD.balance, [4, 0])
-      const balR = await this.sendAndWait(CMD.balance, [4, 1])
+  setFilter(mode: number): Promise<number> {
+    return this.enqueue(async () => {
+      await this.sendRaw(filterWriteFrame(mode))
+      const back = await this.readFilter()
+      if (back !== mode) throw new TransportError(`设备回读为 ${back}，与写入值 ${mode} 不一致`, 'verify')
+      return back
+    })
+  }
 
-      return {
-        firmware: firmware || '(空)',
-        volume,
-        // 偏移 = 桌面版 resp 索引 − 1（桌面版的 resp[0] 是报告 ID）
-        mic: Math.round(le16(micResp, 3) / 256),
-        filter: filterResp[3] ?? 0,
-        gain: gainResp[3] ?? 0,
-        led: (ledResp[3] ?? 0) !== 0,
-        balance: Math.round(le16(balR, 4) / 256) - Math.round(le16(balL, 4) / 256),
-      }
+  setGain(level: number): Promise<number> {
+    return this.enqueue(async () => {
+      await this.sendRaw(gainWriteFrame(level))
+      const back = await this.readGain()
+      if (back !== level) throw new TransportError(`设备回读为 ${back}，与写入值 ${level} 不一致`, 'verify')
+      return back
+    })
+  }
+
+  setLed(on: boolean): Promise<boolean> {
+    return this.enqueue(async () => {
+      await this.sendRaw(ledWriteFrame(on))
+      const back = await this.readLed()
+      if (back !== on) throw new TransportError('指示灯状态与写入值不一致', 'verify')
+      return back
+    })
+  }
+
+  setBalance(raw: number): Promise<number> {
+    return this.enqueue(async () => {
+      for (const frame of balanceWriteFrames(raw)) await this.sendRaw(frame)
+      const back = await this.readBalance()
+      if (back !== raw) throw new TransportError(`设备回读为 ${back}，与写入值 ${raw} 不一致`, 'verify')
+      return back
     })
   }
 }

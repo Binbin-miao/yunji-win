@@ -15,8 +15,8 @@ export const COPY = {
   reading: '正在读取设备状态…',
   sectionModels: '支持的机型',
   sectionModelsHint: '旋润系列走厂商控制传输，浏览器通道暂不支持',
-  sectionState: '设备状态',
-  sectionStateHint: '只读，修改功能将在后续版本接入',
+  sectionState: '设备设置',
+  sectionStateHint: '拖动或点选后自动写入设备',
   supported: '浏览器可直连',
   unsupported: '请用桌面版',
 
