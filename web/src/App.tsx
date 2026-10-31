@@ -342,6 +342,7 @@ export default function App() {
               state={state}
               failed={failed}
               bands={bands}
+              onBandsChange={setBands}
               dbRange={dbRange}
               onDbRange={setDbRange}
               status={status}

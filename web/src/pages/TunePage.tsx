@@ -1,6 +1,8 @@
+import { useState } from 'react'
 import { COPY } from '../copy'
 import EqChart from '../components/EqChart'
 import { DB_RANGES, type EqBand } from '../domain/eq'
+import { MAX_BANDS } from '../domain/eqEdit'
 import type { ConnectedDevice, DeviceState } from '../transport/types'
 import type { ParamKey, SliderKey, WriteStatus } from '../types/ui'
 
@@ -9,6 +11,7 @@ interface Props {
   state: DeviceState | null
   failed: Array<keyof DeviceState>
   bands: EqBand[]
+  onBandsChange: (bands: EqBand[]) => void
   dbRange: (typeof DB_RANGES)[number]
   onDbRange: (r: (typeof DB_RANGES)[number]) => void
   status: Partial<Record<ParamKey, WriteStatus>>
@@ -27,6 +30,7 @@ export default function TunePage({
   state,
   failed,
   bands,
+  onBandsChange,
   dbRange,
   onDbRange,
   status,
@@ -39,6 +43,8 @@ export default function TunePage({
   commitText,
   apply,
 }: Props) {
+  const [selected, setSelected] = useState<number | null>(null)
+
   const statusNode = (key: ParamKey) => {
     const s = status[key]
     if (!s || s.kind === 'idle') return null
@@ -64,7 +70,18 @@ export default function TunePage({
             ))}
           </div>
         </div>
-        <EqChart bands={bands} range={dbRange} />
+        <EqChart
+          bands={bands}
+          range={dbRange}
+          selected={selected}
+          onSelect={setSelected}
+          onChange={onBandsChange}
+        />
+        <p className="hint ops">
+          拖动锚点改频率与增益 · Ctrl 拖动锁单轴 · 滚轮／Shift+滚轮调 Q · 点空白加段（最多 {MAX_BANDS} 段）·
+          双击归零 · 右键删除 · 方向键微调 · Delete 删除
+          {bands.length >= MAX_BANDS && <span className="write warn"> 已满 {MAX_BANDS} 段，删掉一段才能再加</span>}
+        </p>
         <div className="bands">
           {bands.map((b, i) => (
             <div className="band" key={`${b.freq}-${i}`}>
@@ -76,8 +93,8 @@ export default function TunePage({
         </div>
         <p className="hint">
           {device.kind === 'simulator'
-            ? '模拟器示例曲线；真机上此处显示设备内 EQ'
-            : '设备内 EQ 读取将在写入功能接入后同步，当前显示为平直曲线'}
+            ? '模拟器示例曲线，改完不会写入任何设备'
+            : '曲线改动只存在本地，写入设备在 09 号工单接入'}
         </p>
       </section>
 

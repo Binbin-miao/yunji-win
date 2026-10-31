@@ -325,6 +325,25 @@ body {
   width: 100%;
 }
 
+.chart-canvas {
+  cursor: grab;
+  touch-action: none;
+  outline: none;
+  border-radius: 10px;
+}
+
+.chart-canvas:active {
+  cursor: grabbing;
+}
+
+.chart-canvas:focus-visible {
+  box-shadow: 0 0 0 1px rgba(201, 166, 255, 0.45);
+}
+
+.ops {
+  margin: 2px 0 10px;
+}
+
 .bands {
   display: grid;
   grid-template-columns: repeat(8, 1fr);
