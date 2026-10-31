@@ -26,7 +26,7 @@ export const COPY = {
     mic: { label: '麦克风', hint: '麦克风回放音量，范围 −30 到 +30' },
     filter: { label: '滤波器', hint: '数字滤波器的滚降与相位模式' },
     gain: { label: '增益', hint: '输出增益档位，高档更响也更易失真' },
-    led: { label: '指示灯', hint: '设备机身灯效开关' },
+    led: { label: '指示灯', hint: '当前固件无法通过浏览器控制，仅显示状态' },
     balance: { label: '声道平衡', hint: '负值偏左、正值偏右' },
   },
 

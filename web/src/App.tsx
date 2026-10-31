@@ -454,16 +454,8 @@ export default function App() {
               <div className="param">
                 <div className="param-top">
                   <span className="param-label">{COPY.param.led.label}</span>
-                  {statusNode('led')}
                 </div>
-                <div className="chips">
-                  <button className={`chip ${state.led ? 'on' : ''}`} onClick={() => apply('led', 1)}>
-                    开
-                  </button>
-                  <button className={`chip ${!state.led ? 'on' : ''}`} onClick={() => apply('led', 0)}>
-                    关
-                  </button>
-                </div>
+                <strong className="param-value small">{failed.includes('led') ? '—' : state.led ? '开' : '关'}</strong>
                 <span className="param-hint">{COPY.param.led.hint}</span>
               </div>
 
