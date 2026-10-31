@@ -742,3 +742,83 @@ body {
   border-radius: 6px;
   background: rgba(11, 8, 16, 0.5);
 }
+
+/* ---------- 导入面板 ---------- */
+.import-panel {
+  border: 1px dashed var(--line2);
+  border-radius: 12px;
+  padding: 12px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  transition: 0.15s;
+}
+
+.import-panel.dragging {
+  border-color: rgba(201, 166, 255, 0.7);
+  background: rgba(161, 117, 240, 0.08);
+}
+
+.import-text {
+  width: 100%;
+  resize: vertical;
+  min-height: 96px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: rgba(11, 8, 16, 0.6);
+  color: var(--ink);
+  font-family: 'Cascadia Mono', Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.7;
+  outline: none;
+}
+
+.import-text:focus {
+  border-color: rgba(201, 166, 255, 0.5);
+}
+
+/* ---------- 拟合预览 ---------- */
+.fit-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: rgba(11, 8, 16, 0.45);
+}
+
+.fit-charts {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.fit-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.fit-metrics {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.fit-metrics b {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.fit-bands {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px 12px;
+  font-size: 11px;
+}

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { COPY } from '../copy'
 import BandEditor from '../components/BandEditor'
+import ImportPanel from '../components/ImportPanel'
 import EqChart from '../components/EqChart'
 import { DB_RANGES, type EqBand } from '../domain/eq'
 import { MAX_BANDS, freqLimits, removeBand, replaceBand } from '../domain/eqEdit'
@@ -62,6 +63,7 @@ export default function TunePage({
 }: Props) {
   const [selected, setSelected] = useState<number | null>(null)
   const [confirming, setConfirming] = useState(false)
+  const [importing, setImporting] = useState(false)
 
   const statusNode = (key: ParamKey) => {
     const s = status[key]
@@ -86,6 +88,9 @@ export default function TunePage({
           <button className="chip" onClick={onRedo} disabled={!canRedo} title="重做 (Ctrl+Shift+Z)">
             重做
           </button>
+          <button className="chip" onClick={() => setImporting(v => !v)}>
+            {importing ? '收起导入' : '导入'}
+          </button>
           <button
             className="btn"
             onClick={() => setConfirming(true)}
@@ -102,6 +107,7 @@ export default function TunePage({
             ))}
           </div>
         </div>
+        {importing && <ImportPanel onApply={next => onBandsChange(next, false)} />}
         {confirming && (
           <div className="confirm">
             <span>将把当前 8 段写入设备并覆盖现有 EQ，写入后设备会短暂断音。</span>
