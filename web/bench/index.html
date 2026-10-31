@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <title>曲线区性能基准</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 24px;
+        background: #0b0810;
+        color: #f2ecfa;
+        font: 13px/1.7 'Cascadia Mono', Consolas, monospace;
+      }
+      h1 { font-size: 15px; margin: 0 0 12px; }
+      pre { white-space: pre-wrap; }
+      canvas { display: none; }
+    </style>
+  </head>
+  <body>
+    <h1>云姬网页版 · 曲线区性能基准</h1>
+    <pre id="out">运行中…</pre>
+    <canvas id="chart"></canvas>
+    <script type="module" src="../src/bench/run.ts"></script>
+  </body>
+</html>

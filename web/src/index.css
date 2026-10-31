@@ -316,8 +316,24 @@ body {
 
 /* ---------- 曲线 ---------- */
 .chart {
+  position: relative;
   width: 100%;
   margin: 4px 0 10px;
+}
+
+/* 网格层固定在底层，只随尺寸重画；上面那张画布每帧重画曲线 */
+.chart-grid {
+  position: absolute;
+  left: 0;
+  top: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* 绝对定位的网格层会压住静态内容，这里把曲线层显式提到上面 */
+.chart > canvas:not(.chart-grid) {
+  position: relative;
+  z-index: 1;
 }
 
 .chart canvas {

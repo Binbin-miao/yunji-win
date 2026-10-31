@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef } from 'react'
-import { DB_RANGES, F_MAX, F_MIN, curve, type EqBand } from '../domain/eq'
-import { targetDbAt } from '../domain/target'
+import type { EqBand } from '../domain/eq'
+import { DB_RANGES } from '../domain/eq'
 import type { TargetCurve } from '../data/targets'
+import { drawData, drawGrid } from './chartDraw'
 import {
-  HIT_RADIUS,
   MAX_BANDS,
   type Layout,
   type LockAxis,
@@ -16,23 +16,8 @@ import {
   removeBand,
   replaceBand,
   scrollQ,
-  xAtFreq,
-  yAtDb,
 } from '../domain/eqEdit'
 
-const TICKS = [20, 50, 100, 200, 500, 1000, 2000, 5000, 10000, 20000]
-const LABELS: Record<number, string> = {
-  20: '20',
-  50: '50',
-  100: '100',
-  200: '200',
-  500: '500',
-  1000: '1k',
-  2000: '2k',
-  5000: '5k',
-  10000: '10k',
-  20000: '20k',
-}
 /** 判定「点击」而非「拖动」的像素阈值 */
 const CLICK_SLOP = 4
 
@@ -79,189 +64,81 @@ export default function EqChart({ bands, target, range, selected, onSelect, onCh
   }
 
   // ---------- 绘制 ----------
-  const draw = useCallback(() => {
+  // 网格层缓存在离屏画布上，只有尺寸或纵轴范围变了才重画；
+  // 每帧只做「贴网格 + 画曲线与锚点」，拖动时开销稳定。
+  const gridCanvasRef = useRef<HTMLCanvasElement | null>(null)
+  const gridKeyRef = useRef('')
+  const rafRef = useRef(0)
+
+  const render = useCallback(() => {
     const canvas = canvasRef.current
     const wrap = wrapRef.current
     if (!canvas || !wrap) return
 
     const dpr = window.devicePixelRatio || 1
     const l = layout()
-    canvas.width = Math.round(l.width * dpr)
-    canvas.height = Math.round(height * dpr)
-    canvas.style.width = `${l.width}px`
-    canvas.style.height = `${height}px`
+    const w = Math.max(1, Math.round(l.width))
+    const dw = Math.round(w * dpr)
+    const dh = Math.round(height * dpr)
+    if (canvas.width !== dw || canvas.height !== dh) {
+      canvas.width = dw
+      canvas.height = dh
+      canvas.style.width = `${w}px`
+      canvas.style.height = `${height}px`
+    }
 
     const ctx = canvas.getContext('2d')
     if (!ctx) return
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-    ctx.clearRect(0, 0, l.width, height)
+    ctx.clearRect(0, 0, w, height)
 
-    const px = (f: number) => xAtFreq(f, l)
-    const py = (db: number) => yAtDb(db, l)
-    const x0 = px(F_MIN)
-    const x1 = px(F_MAX)
-    const yTop = py(range)
-    const yBottom = py(-range)
-
-    // 竖向网格
-    ctx.strokeStyle = 'rgba(196,164,255,0.10)'
-    ctx.lineWidth = 1
-    for (const t of TICKS) {
-      const x = Math.round(px(t)) + 0.5
-      ctx.beginPath()
-      ctx.moveTo(x, yTop)
-      ctx.lineTo(x, yBottom)
-      ctx.stroke()
-    }
-
-    // 横向网格
-    const step = range === 12 ? 6 : 3
-    for (let db = -range; db <= range; db += step) {
-      const y = Math.round(py(db)) + 0.5
-      ctx.strokeStyle = db === 0 ? 'rgba(196,164,255,0.24)' : 'rgba(196,164,255,0.08)'
-      ctx.beginPath()
-      ctx.moveTo(x0, y)
-      ctx.lineTo(x1, y)
-      ctx.stroke()
-    }
-
-    // 刻度
-    ctx.fillStyle = 'rgba(167,156,184,0.75)'
-    ctx.font = '10px "Cascadia Mono", Consolas, monospace'
-    ctx.textAlign = 'center'
-    ctx.textBaseline = 'top'
-    for (const t of TICKS) ctx.fillText(LABELS[t], px(t), yBottom + 6)
-    ctx.textAlign = 'right'
-    ctx.textBaseline = 'middle'
-    for (let db = -range; db <= range; db += step) {
-      ctx.fillText(db > 0 ? `+${db}` : String(db), x0 - 6, py(db))
-    }
-
-    // 曲线
-    const { freqs, dbs } = curve(bands, 240)
-    const tDbs = target ? freqs.map(f => targetDbAt(target.points, f)) : null
-
-    // 差值填充（当前 − 目标）
-    if (tDbs) {
-      ctx.save()
-      ctx.beginPath()
-      freqs.forEach((f, i) => {
-        const x = px(f)
-        const y = py(dbs[i])
-        if (i === 0) ctx.moveTo(x, y)
-        else ctx.lineTo(x, y)
-      })
-      for (let i = freqs.length - 1; i >= 0; i--) ctx.lineTo(px(freqs[i]), py(tDbs[i]))
-      ctx.closePath()
-      ctx.fillStyle = 'rgba(121,224,208,0.10)'
-      ctx.fill()
-      ctx.restore()
-    }
-    const trace = () => {
-      ctx.beginPath()
-      freqs.forEach((f, i) => {
-        const x = px(f)
-        const y = py(dbs[i])
-        if (i === 0) ctx.moveTo(x, y)
-        else ctx.lineTo(x, y)
-      })
-    }
-
-    trace()
-    const fill = ctx.createLinearGradient(0, yTop, 0, yBottom)
-    fill.addColorStop(0, 'rgba(161,117,240,0.28)')
-    fill.addColorStop(1, 'rgba(161,117,240,0)')
-    ctx.save()
-    ctx.lineTo(x1, py(0))
-    ctx.lineTo(x0, py(0))
-    ctx.closePath()
-    ctx.fillStyle = fill
-    ctx.fill()
-    ctx.restore()
-
-    ctx.save()
-    trace()
-    ctx.strokeStyle = '#C9A6FF'
-    ctx.lineWidth = 2
-    ctx.shadowColor = 'rgba(201,166,255,0.75)'
-    ctx.shadowBlur = 10
-    ctx.stroke()
-    ctx.restore()
-
-    // 目标曲线（虚线）
-    if (tDbs) {
-      ctx.save()
-      ctx.setLineDash([5, 4])
-      ctx.beginPath()
-      freqs.forEach((f, i) => {
-        const x = px(f)
-        const y = py(tDbs[i])
-        if (i === 0) ctx.moveTo(x, y)
-        else ctx.lineTo(x, y)
-      })
-      ctx.strokeStyle = 'rgba(121,224,208,0.9)'
-      ctx.lineWidth = 1.4
-      ctx.stroke()
-      ctx.restore()
-    }
-
-    // 锚点
-    bands.forEach((b, i) => {
-      const x = px(b.freq)
-      const y = py(b.gain)
-      const isSel = i === selected
-      if (isSel) {
-        ctx.beginPath()
-        ctx.arc(x, y, HIT_RADIUS, 0, Math.PI * 2)
-        ctx.strokeStyle = 'rgba(201,166,255,0.35)'
-        ctx.lineWidth = 1
-        ctx.stroke()
+    // 网格画在下面那张画布上，尺寸或纵轴范围变了才重画；这一帧只管曲线
+    const key = `${w}x${height}@${dpr}:${range}`
+    if (gridKeyRef.current !== key) {
+      const g = gridCanvasRef.current
+      const gctx = g?.getContext('2d')
+      if (g && gctx) {
+        g.width = dw
+        g.height = dh
+        g.style.width = `${w}px`
+        g.style.height = `${height}px`
+        gctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+        gctx.clearRect(0, 0, w, height)
+        drawGrid(gctx, l, range)
       }
-      ctx.beginPath()
-      ctx.arc(x, y, isSel ? 6 : 5, 0, Math.PI * 2)
-      ctx.fillStyle = '#0B0810'
-      ctx.fill()
-      ctx.strokeStyle = isSel ? '#F2ECFA' : 'rgba(201,166,255,0.9)'
-      ctx.lineWidth = isSel ? 2 : 1.6
-      ctx.stroke()
-
-      ctx.fillStyle = 'rgba(242,236,250,0.85)'
-      ctx.font = '9px "Cascadia Mono", Consolas, monospace'
-      ctx.textAlign = 'center'
-      ctx.textBaseline = 'bottom'
-      ctx.fillText(String(i + 1), x, y - 9)
-    })
-
-    // 选中段的读数
-    if (selected !== null && bands[selected]) {
-      const b = bands[selected]
-      const text = `${b.freq >= 1000 ? (b.freq / 1000).toFixed(2) + 'k' : b.freq + ' Hz'} · ${
-        b.gain > 0 ? '+' : ''
-      }${b.gain.toFixed(1)} dB · Q ${b.q.toFixed(2)}`
-      ctx.font = '11px "Cascadia Mono", Consolas, monospace'
-      const w = ctx.measureText(text).width + 16
-      const x = Math.min(Math.max(px(b.freq) - w / 2, x0), x1 - w)
-      const y = Math.max(py(b.gain) - 34, yTop + 2)
-      ctx.fillStyle = 'rgba(11,8,16,0.88)'
-      ctx.strokeStyle = 'rgba(201,166,255,0.35)'
-      ctx.lineWidth = 1
-      ctx.beginPath()
-      ctx.roundRect(x, y, w, 20, 6)
-      ctx.fill()
-      ctx.stroke()
-      ctx.fillStyle = '#F2ECFA'
-      ctx.textAlign = 'left'
-      ctx.textBaseline = 'middle'
-      ctx.fillText(text, x + 8, y + 10)
+      gridKeyRef.current = key
     }
+
+    drawData(ctx, l, { bands, target: target ?? null, selected }, range)
   }, [bands, target, range, selected, height])
 
+  // 同一帧内的多次改动合并成一次重绘
+  const renderRef = useRef(render)
+  renderRef.current = render
+  const schedule = useCallback(() => {
+    if (rafRef.current) return
+    rafRef.current = requestAnimationFrame(() => {
+      rafRef.current = 0
+      renderRef.current()
+    })
+  }, [])
+
   useEffect(() => {
-    draw()
-    const ro = new ResizeObserver(draw)
-    if (wrapRef.current) ro.observe(wrapRef.current)
+    schedule()
+  }, [render, schedule])
+
+  useEffect(() => {
+    const wrap = wrapRef.current
+    if (!wrap) return
+    const ro = new ResizeObserver(() => {
+      gridKeyRef.current = '' // 尺寸变了，网格层作废
+      schedule()
+    })
+    ro.observe(wrap)
     return () => ro.disconnect()
-  }, [draw])
+  }, [schedule])
+
+  useEffect(() => () => cancelAnimationFrame(rafRef.current), [])
 
   // ---------- 事件 ----------
   function onPointerDown(e: React.PointerEvent<HTMLCanvasElement>) {
@@ -367,6 +244,7 @@ export default function EqChart({ bands, target, range, selected, onSelect, onCh
 
   return (
     <div ref={wrapRef} className="chart">
+      <canvas ref={gridCanvasRef} className="chart-canvas chart-grid" aria-hidden="true" />
       <canvas
         ref={canvasRef}
         className="chart-canvas"

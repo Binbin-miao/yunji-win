@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import MiniCurve from './MiniCurve'
 import type { EqBand } from '../domain/eq'
 import { fitParsed, type FitResult } from '../domain/eqFit'
 import { parseEqText, type ParseResult } from '../domain/eqImport'
 import { MAX_BANDS } from '../domain/eqEdit'
+import { COPY } from '../copy'
 
 interface Props {
   onApply: (bands: EqBand[]) => void
@@ -15,7 +16,13 @@ export default function ImportPanel({ onApply }: Props) {
   const [result, setResult] = useState<ParseResult | null>(null)
   const [dragging, setDragging] = useState(false)
   const [fit, setFit] = useState<FitResult | null>(null)
+  const [fitting, setFitting] = useState(false)
+  const aliveRef = useRef(true)
   const fileRef = useRef<HTMLInputElement | null>(null)
+
+  useEffect(() => () => {
+    aliveRef.current = false
+  }, [])
 
   function parse(src: string) {
     setText(src)
@@ -36,9 +43,19 @@ export default function ImportPanel({ onApply }: Props) {
     setText('')
   }
 
+  // 拟合要跑几十毫秒，先让「拟合中…」画出来再算，避免点击像卡住
   function runFit() {
-    if (!result?.ok) return
-    setFit(fitParsed(result.result))
+    if (!result?.ok || fitting) return
+    const parsed = result.result
+    setFitting(true)
+    requestAnimationFrame(() =>
+      setTimeout(() => {
+        const out = fitParsed(parsed)
+        if (!aliveRef.current) return
+        setFit(out)
+        setFitting(false)
+      }, 0),
+    )
   }
 
   const ok = result?.ok === true
@@ -119,8 +136,13 @@ export default function ImportPanel({ onApply }: Props) {
               : `导入 ${bandCount} 段，超过设备 ${MAX_BANDS} 段上限，需要先拟合`}
           </span>
           <div className="spacer" />
-          <button className="chip" onClick={runFit} title="超 8 段时压缩成设备上限">
-            拟合成 {MAX_BANDS} 段
+          <button
+            className="chip"
+            onClick={runFit}
+            disabled={fitting}
+            title={COPY.controls.fit.hint}
+          >
+            {fitting ? COPY.controls.fitting.label : COPY.controls.fit.label}
           </button>
         </div>
       )}

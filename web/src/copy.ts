@@ -59,6 +59,7 @@ export const COPY = {
     targetNone: { label: '不叠加', hint: '只看自己的曲线' },
     targetPick: { label: '目标曲线', hint: '叠一条参考线看差多少' },
     fit: { label: '拟合成 8 段', hint: '超 8 段时压缩成设备上限' },
+    fitting: { label: '拟合中…', hint: '正在算，稍等一下' },
     fitApply: { label: '应用拟合结果', hint: '确认用拟合后的参数' },
     fitCancel: { label: '放弃拟合', hint: '不改变当前曲线' },
     importApply: { label: '应用到曲线', hint: '把解析结果填进曲线' },
