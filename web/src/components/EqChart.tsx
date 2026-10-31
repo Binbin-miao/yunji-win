@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react'
 import { DB_RANGES, F_MAX, F_MIN, curve, type EqBand } from '../domain/eq'
+import { targetDbAt } from '../domain/target'
+import type { TargetCurve } from '../data/targets'
 import {
   HIT_RADIUS,
   MAX_BANDS,
@@ -36,6 +38,8 @@ const CLICK_SLOP = 4
 
 interface Props {
   bands: EqBand[]
+  /** 叠加的目标曲线，null 表示不叠加 */
+  target?: TargetCurve | null
   range: (typeof DB_RANGES)[number]
   selected: number | null
   onSelect: (index: number | null) => void
@@ -56,7 +60,7 @@ interface DragState {
   moved: boolean
 }
 
-export default function EqChart({ bands, range, selected, onSelect, onChange, onBegin, onCommit, height = 320 }: Props) {
+export default function EqChart({ bands, target, range, selected, onSelect, onChange, onBegin, onCommit, height = 320 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const dragRef = useRef<DragState | null>(null)
@@ -135,6 +139,24 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, on
 
     // 曲线
     const { freqs, dbs } = curve(bands, 240)
+    const tDbs = target ? freqs.map(f => targetDbAt(target.points, f)) : null
+
+    // 差值填充（当前 − 目标）
+    if (tDbs) {
+      ctx.save()
+      ctx.beginPath()
+      freqs.forEach((f, i) => {
+        const x = px(f)
+        const y = py(dbs[i])
+        if (i === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      })
+      for (let i = freqs.length - 1; i >= 0; i--) ctx.lineTo(px(freqs[i]), py(tDbs[i]))
+      ctx.closePath()
+      ctx.fillStyle = 'rgba(121,224,208,0.10)'
+      ctx.fill()
+      ctx.restore()
+    }
     const trace = () => {
       ctx.beginPath()
       freqs.forEach((f, i) => {
@@ -165,6 +187,23 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, on
     ctx.shadowBlur = 10
     ctx.stroke()
     ctx.restore()
+
+    // 目标曲线（虚线）
+    if (tDbs) {
+      ctx.save()
+      ctx.setLineDash([5, 4])
+      ctx.beginPath()
+      freqs.forEach((f, i) => {
+        const x = px(f)
+        const y = py(tDbs[i])
+        if (i === 0) ctx.moveTo(x, y)
+        else ctx.lineTo(x, y)
+      })
+      ctx.strokeStyle = 'rgba(121,224,208,0.9)'
+      ctx.lineWidth = 1.4
+      ctx.stroke()
+      ctx.restore()
+    }
 
     // 锚点
     bands.forEach((b, i) => {
@@ -215,7 +254,7 @@ export default function EqChart({ bands, range, selected, onSelect, onChange, on
       ctx.textBaseline = 'middle'
       ctx.fillText(text, x + 8, y + 10)
     }
-  }, [bands, range, selected, height])
+  }, [bands, target, range, selected, height])
 
   useEffect(() => {
     draw()

@@ -3,7 +3,9 @@ import { COPY } from '../copy'
 import BandEditor from '../components/BandEditor'
 import ImportPanel from '../components/ImportPanel'
 import EqChart from '../components/EqChart'
+import { TARGETS } from '../data/targets'
 import { DB_RANGES, type EqBand } from '../domain/eq'
+import { diffStats } from '../domain/target'
 import { MAX_BANDS, freqLimits, removeBand, replaceBand } from '../domain/eqEdit'
 import type { ConnectedDevice, DeviceState } from '../transport/types'
 import type { ParamKey, SliderKey, WriteStatus } from '../types/ui'
@@ -64,6 +66,10 @@ export default function TunePage({
   const [selected, setSelected] = useState<number | null>(null)
   const [confirming, setConfirming] = useState(false)
   const [importing, setImporting] = useState(false)
+  const [targetId, setTargetId] = useState('none')
+
+  const target = TARGETS.find(t => t.id === targetId) ?? null
+  const stats = target ? diffStats(bands, target) : null
 
   const statusNode = (key: ParamKey) => {
     const s = status[key]
@@ -131,8 +137,33 @@ export default function TunePage({
           </div>
         )}
 
+        <div className="row target-row">
+          <span className="hint">目标曲线</span>
+          <button className={`chip ${targetId === 'none' ? 'on' : ''}`} onClick={() => setTargetId('none')}>
+            不叠加
+          </button>
+          {TARGETS.map(t => (
+            <button
+              key={t.id}
+              className={`chip ${targetId === t.id ? 'on' : ''}`}
+              onClick={() => setTargetId(t.id)}
+              title={t.source}
+            >
+              {t.label}
+            </button>
+          ))}
+          {stats && (
+            <span className="hint diff-readout">
+              最大高出 {stats.maxPos!.db.toFixed(1)} dB @{Math.round(stats.maxPos!.freq)} Hz · 最大缺口{' '}
+              {stats.maxNeg!.db.toFixed(1)} dB @{Math.round(stats.maxNeg!.freq)} Hz · RMS{' '}
+              {stats.rms.toFixed(1)} dB
+            </span>
+          )}
+        </div>
+
         <EqChart
           bands={bands}
+          target={target}
           range={dbRange}
           selected={selected}
           onSelect={setSelected}
