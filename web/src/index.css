@@ -1,17 +1,32 @@
 :root {
   --bg: #0b0810;
-  --panel: rgba(23, 16, 33, 0.72);
   --ink: #f2ecfa;
   --dim: #a79cb8;
-  --faint: #6e6480;
+  /* 三级文字。原来 #6e6480 在所有暗底上只有 3.3~3.6，正文说明一律不合格；
+     #948AA8 在最亮的选中卡底 rgb(41,29,61) 上 4.83，其余底色 5.5~6.1 */
+  --faint: #948aa8;
   --violet: #a175f0;
   --glow: #c9a6ff;
   --cyan: #79e0d0;
   --red: #f26d6d;
   --amber: #e8b75a;
-  --line: rgba(196, 164, 255, 0.14);
-  --line2: rgba(196, 164, 255, 0.26);
-  --radius: 14px;
+  --line: rgba(196, 164, 255, 0.12);
+  --line2: rgba(196, 164, 255, 0.24);
+  /* 三档表面：hero 主卡 > card 次卡 > well 内嵌条目 */
+  --panel-hero: rgba(27, 19, 39, 0.86);
+  --panel: rgba(21, 15, 30, 0.66);
+  /* 内嵌井底比卡片再压一档。近黑底上的对比度是压缩的，靠比值看不出来，
+     靠的是这 6~8 级的明度落差：原来 0.42 太浅，卡片边界基本只能靠猜 */
+  --well: rgba(6, 4, 10, 0.6);
+  --radius: 16px;
+  --radius-sm: 11px;
+  /* 字号只留四档 + 一档数值展示：元信息 11 / 说明 12 / 正文 13 / 标题 15 / 数值 19。
+     以前散着 10、10.5、11、11.5、12、12.5、13、13.5 八种，等于没有层级。 */
+  --t-xs: 0.6875rem;
+  --t-sm: 0.75rem;
+  --t-base: 0.8125rem;
+  --t-lg: 0.9375rem;
+  --t-xl: 1.1875rem;
 
   color-scheme: dark;
   font-family: 'Microsoft YaHei', 'PingFang SC', 'Segoe UI', system-ui, sans-serif;
@@ -65,27 +80,45 @@ body {
 .rail nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
+  width: 100%;
+  padding: 0 9px;
 }
 
 .rail-item {
-  width: 42px;
-  height: 42px;
-  display: grid;
-  place-items: center;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 2px;
   border-radius: 11px;
   border: 0;
   background: transparent;
   color: var(--faint);
-  font-size: 1rem;
+  font-size: var(--t-base);
   font-family: inherit;
   cursor: pointer;
-  transition: 0.15s;
+  transition: background-color 0.15s, color 0.15s;
+}
+
+.rail-icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.rail-text {
+  font-size: var(--t-xs);
+  letter-spacing: 0.02em;
 }
 
 .rail-item:hover {
   color: var(--ink);
   background: rgba(161, 117, 240, 0.1);
+}
+
+.rail-item:active {
+  background: rgba(161, 117, 240, 0.22);
 }
 
 .rail-item.on {
@@ -110,14 +143,14 @@ body {
 }
 
 .dev-name {
-  font-size: 0.9375rem;
+  font-size: var(--t-lg);
   font-weight: 600;
 }
 
 .kv {
   width: 100%;
   border-collapse: collapse;
-  font-size: 0.7813rem;
+  font-size: var(--t-base);
 }
 
 .kv td {
@@ -136,7 +169,7 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  font-size: 0.7813rem;
+  font-size: var(--t-base);
   color: var(--dim);
   line-height: 1.7;
 }
@@ -151,9 +184,10 @@ body {
 .main {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 20px 24px 40px;
+  gap: 16px;
+  padding: 20px 24px;
   min-width: 0;
+  min-height: 100%;
 }
 
 .header {
@@ -170,13 +204,13 @@ body {
 }
 
 .brand strong {
-  font-size: 0.9375rem;
+  font-size: var(--t-lg);
   font-weight: 600;
   letter-spacing: 0.4px;
 }
 
 .brand span {
-  font-size: 0.6875rem;
+  font-size: var(--t-xs);
   color: var(--faint);
 }
 
@@ -187,11 +221,11 @@ body {
 .pill {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
+  gap: 8px;
   padding: 6px 12px;
   border-radius: 999px;
   border: 1px solid var(--line);
-  font-size: 0.75rem;
+  font-size: var(--t-sm);
   color: var(--dim);
 }
 
@@ -216,20 +250,24 @@ body {
   border: 1px solid var(--line2);
   background: rgba(161, 117, 240, 0.16);
   color: #fff;
-  padding: 9px 18px;
+  padding: 8px 16px;
   border-radius: 10px;
-  font-size: 0.8125rem;
+  font-size: var(--t-base);
   font-family: inherit;
   cursor: pointer;
-  transition: 0.15s;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
 
 .btn:hover:not(:disabled) {
   background: rgba(161, 117, 240, 0.3);
 }
 
+.btn:active:not(:disabled) {
+  background: rgba(161, 117, 240, 0.42);
+}
+
 .btn:disabled {
-  opacity: 0.35;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
@@ -250,15 +288,15 @@ body {
   background: rgba(232, 183, 90, 0.1);
   color: var(--amber);
   border-radius: 12px;
-  padding: 11px 14px;
-  font-size: 0.7813rem;
+  padding: 12px 16px;
+  font-size: var(--t-base);
   line-height: 1.7;
 }
 
 .banner.sim {
-  border-color: rgba(121, 224, 208, 0.3);
-  background: rgba(121, 224, 208, 0.08);
-  color: var(--cyan);
+  border-color: rgba(196, 164, 255, 0.24);
+  background: rgba(161, 117, 240, 0.1);
+  color: var(--glow);
 }
 
 .banner.error {
@@ -272,34 +310,75 @@ body {
   background: var(--panel);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 16px 18px;
+  padding: 20px;
   backdrop-filter: blur(18px);
+}
+
+/* 主卡：曲线区。更实的底、更亮的顶边、更大的内距，让它从背景里浮起来 */
+.card.hero {
+  background: var(--panel-hero);
+  padding: 20px 20px 16px;
+  border-color: rgba(196, 164, 255, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.04),
+    0 18px 44px -28px rgba(0, 0, 0, 0.9);
 }
 
 .card-head {
   display: flex;
   align-items: baseline;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 
 .card-head h2 {
-  font-size: 0.875rem;
+  position: relative;
+  padding-left: 10px;
+  font-size: var(--t-lg);
   font-weight: 600;
   letter-spacing: 0.3px;
 }
 
+/* 标题前的竖条：与中文字面同高并垂直居中。
+   原来 top:0.32em / height:0.82em 比字矮一截又偏上，小字号下像多打了一个叹号。 */
+.card-head h2::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 2px;
+  height: 0.9em;
+  margin-top: -0.45em;
+  border-radius: 2px;
+  background: var(--glow);
+  opacity: 0.7;
+}
+
+/* 卡片内的次级分组标题：与上方内容拉开 16，与自己的卡片只隔 grid gap，
+   保证「标题离上文远、离下文近」。原来 6/-2 的负边距会吃掉 gap，越叠越乱。 */
+.group-title {
+  grid-column: 1 / -1;
+  margin: 16px 0 0;
+  font-size: var(--t-xs);
+  letter-spacing: 0.08em;
+  color: var(--faint);
+}
+
+.group-title:first-of-type {
+  margin-top: 0;
+}
+
 .badge {
-  font-size: 0.6875rem;
-  padding: 3px 9px;
+  font-size: var(--t-xs);
+  padding: 4px 10px;
   border-radius: 999px;
   border: 1px solid var(--line2);
   color: var(--glow);
 }
 
 .hint {
-  font-size: 0.75rem;
+  font-size: var(--t-sm);
   color: var(--faint);
   line-height: 1.8;
 }
@@ -310,7 +389,7 @@ body {
 
 .mono {
   font-family: 'Cascadia Mono', Consolas, monospace;
-  font-size: 0.7188rem;
+  font-size: var(--t-sm);
   color: var(--dim);
 }
 
@@ -357,61 +436,68 @@ body {
 }
 
 .ops {
-  margin: 2px 0 10px;
+  margin: 2px 0 12px;
+  padding-left: 10px;
+  border-left: 2px solid rgba(196, 164, 255, 0.14);
 }
 
 .confirm {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   flex-wrap: wrap;
-  padding: 10px 12px;
-  margin-bottom: 10px;
+  padding: 12px;
+  margin-bottom: 12px;
   border: 1px solid rgba(232, 183, 90, 0.35);
   background: rgba(232, 183, 90, 0.08);
   border-radius: 11px;
-  font-size: 0.7813rem;
+  font-size: var(--t-base);
   color: var(--amber);
 }
 
 .bands {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(4.4rem, 1fr));
-  gap: 6px;
-  margin-bottom: 8px;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
 .band {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
-  padding: 7px 4px;
-  border: 1px solid var(--line);
+  gap: 4px;
+  padding: 8px 4px;
+  border: 1px solid rgba(196, 164, 255, 0.08);
   border-radius: 9px;
-  background: transparent;
+  background: var(--well);
   color: inherit;
   font-family: inherit;
   cursor: pointer;
-  transition: 0.15s;
+  transition: background-color 0.15s, border-color 0.15s;
 }
 
 .band:hover {
   border-color: var(--line2);
 }
 
+.band:active {
+  background: rgba(161, 117, 240, 0.22);
+}
+
 .band.on {
   border-color: rgba(201, 166, 255, 0.55);
-  background: rgba(161, 117, 240, 0.12);
+  background: rgba(161, 117, 240, 0.16);
+  box-shadow: 0 0 0 3px rgba(161, 117, 240, 0.08);
 }
 
 /* 段落数值编辑 */
 .band-edit {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   flex-wrap: wrap;
-  padding: 10px 12px;
+  padding: 12px;
   margin-bottom: 8px;
   border: 1px solid var(--line);
   border-radius: 11px;
@@ -419,15 +505,15 @@ body {
 }
 
 .band-edit-title {
-  font-size: 0.75rem;
+  font-size: var(--t-base);
   color: var(--glow);
 }
 
 .bf {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 0.7188rem;
+  gap: 8px;
+  font-size: var(--t-sm);
   color: var(--faint);
 }
 
@@ -443,25 +529,30 @@ body {
 }
 
 .bf-range {
-  font-size: 0.6875rem;
+  font-size: var(--t-xs);
   color: var(--faint);
   margin-left: auto;
 }
 
 .band-i {
-  font-size: 0.625rem;
+  font-size: var(--t-xs);
   color: var(--faint);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
 .band-f {
-  font-size: 0.7188rem;
+  font-size: var(--t-base);
   color: var(--dim);
   font-family: 'Cascadia Mono', Consolas, monospace;
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
 }
 
 .band-g {
-  font-size: 0.75rem;
+  font-size: var(--t-base);
   color: var(--glow);
+  line-height: 1.5;
   font-variant-numeric: tabular-nums;
 }
 
@@ -495,8 +586,13 @@ body {
   background: var(--glow);
 }
 
+.slider:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .write {
-  font-size: 0.7188rem;
+  font-size: var(--t-sm);
   color: var(--faint);
   margin-left: auto;
 }
@@ -524,12 +620,13 @@ body {
   background: rgba(11, 8, 16, 0.6);
   color: var(--ink);
   font-family: 'Cascadia Mono', Consolas, monospace;
-  font-size: 0.8125rem;
+  font-size: var(--t-base);
+  font-variant-numeric: tabular-nums;
   outline: none;
-  transition: 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
-.num:hover {
+.num:hover:not(:disabled) {
   border-color: var(--line2);
 }
 
@@ -538,46 +635,57 @@ body {
   box-shadow: 0 0 0 3px rgba(161, 117, 240, 0.15);
 }
 
+.num:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 /* ---------- 参数网格 ---------- */
+/* 6 轨 + 每张卡 span 2 = 每行恰好 3 张且均分整行；
+   用 auto-fill 时 3 张卡只占左边几列，右侧会空一大片。
+   ponytail: 6 = 每组 3 张 × span 2，改每行数量要同时改这两处 */
 .params {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
-  gap: 10px;
-  align-items: start;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+  align-items: stretch;
 }
 
 .param {
+  grid-column: span 2;
   display: flex;
   flex-direction: column;
-  gap: 5px;
-  padding: 12px 13px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
+  gap: 4px;
+  padding: 12px 16px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--well);
+  transition: background-color 0.15s, border-color 0.15s;
+}
+
+.param:hover {
+  border-color: var(--line);
 }
 
 .param-label {
-  font-size: 0.7188rem;
+  font-size: var(--t-base);
   color: var(--dim);
 }
 
+/* 数值不再做渐变字：暗底上白→紫的渐变会把下半截数字压到 3:1 以下，
+   而且这是最典型的 AI 套路配色。改用实色 + 等宽数字，靠字号与留白立起来。 */
 .param-value {
-  font-size: 1.1875rem;
+  font-size: var(--t-xl);
   font-weight: 300;
   letter-spacing: 0.2px;
-  background: linear-gradient(180deg, #fff, var(--glow));
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
 }
 
 .param-hint {
-  font-size: 0.6875rem;
+  font-size: var(--t-xs);
   color: var(--faint);
   line-height: 1.6;
-}
-
-.param-wide {
-  grid-column: span 2;
 }
 
 .param-top {
@@ -591,7 +699,7 @@ body {
 }
 
 .param-value.small {
-  font-size: 0.9375rem;
+  font-size: var(--t-lg);
   background: none;
   color: var(--ink);
   -webkit-text-fill-color: var(--ink);
@@ -605,7 +713,7 @@ body {
 }
 
 .chip {
-  font-size: 0.7188rem;
+  font-size: var(--t-sm);
   padding: 6px 10px;
   border-radius: 8px;
   border: 1px solid var(--line);
@@ -613,12 +721,21 @@ body {
   color: var(--dim);
   cursor: pointer;
   font-family: inherit;
-  transition: 0.15s;
+  transition: background-color 0.15s, border-color 0.15s, color 0.15s;
 }
 
-.chip:hover {
+.chip:hover:not(:disabled) {
   border-color: var(--line2);
   color: var(--ink);
+}
+
+.chip:active:not(:disabled) {
+  background: rgba(161, 117, 240, 0.2);
+}
+
+.chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .chip.on {
@@ -631,20 +748,23 @@ body {
 .models {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(13.75rem, 1fr));
-  gap: 10px;
+  gap: 12px;
 }
 
+/* 和 .param / .filter-card 同一套语言：无边框井底，靠底色分层。
+   之前这里还留着 1px 细边，导致同一个页面里出现两种卡片语言。 */
 .model {
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
+  background: var(--well);
   border-radius: 11px;
-  padding: 12px 13px;
+  padding: 12px 16px;
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
 }
 
 .model-off {
-  opacity: 0.55;
+  opacity: 0.78;
 }
 
 .model-top {
@@ -655,13 +775,13 @@ body {
 }
 
 .model-top strong {
-  font-size: 0.8125rem;
+  font-size: var(--t-base);
   font-weight: 600;
 }
 
 .tag {
-  font-size: 0.6563rem;
-  padding: 2px 7px;
+  font-size: var(--t-xs);
+  padding: 2px 8px;
   border-radius: 6px;
   border: 1px solid var(--line);
   white-space: nowrap;
@@ -673,7 +793,7 @@ body {
 }
 
 .tag-off {
-  color: var(--faint);
+  color: var(--dim);
 }
 
 @media (max-width: 1024px) {
@@ -681,14 +801,19 @@ body {
     grid-template-columns: 56px minmax(0, 1fr);
   }
   .main {
-    padding: 16px 16px 32px;
+    padding: 16px;
   }
   .rail {
-    gap: 14px;
+    gap: 16px;
   }
+  /* 原来写死 36×36，但里面是图标 + 文字竖排，内容本就 40 多高，会溢出按钮 */
   .rail-item {
-    width: 36px;
-    height: 36px;
+    width: 100%;
+    min-height: 36px;
+    padding: 6px 2px;
+  }
+  .rail-icon {
+    font-size: 0.9375rem;
   }
 }
 
@@ -696,23 +821,25 @@ body {
 .text {
   flex: 1;
   min-width: 200px;
-  padding: 9px 12px;
+  padding: 8px 12px;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: rgba(11, 8, 16, 0.6);
   color: var(--ink);
   font-family: inherit;
-  font-size: 0.8125rem;
+  font-size: var(--t-base);
   outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .text:focus {
   border-color: rgba(201, 166, 255, 0.6);
+  box-shadow: 0 0 0 3px rgba(161, 117, 240, 0.15);
 }
 
 .text.small {
   padding: 4px 8px;
-  font-size: 0.8125rem;
+  font-size: var(--t-base);
 }
 
 .warn-text {
@@ -724,33 +851,40 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 6px;
+  margin-top: 8px;
 }
 
 .preset {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
+  gap: 16px;
+  padding: 12px 16px;
+  border: 1px solid transparent;
   border-radius: 11px;
+  background: var(--well);
+  transition: border-color 0.15s;
+}
+
+.preset:hover {
+  border-color: var(--line);
 }
 
 .preset-main {
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: 4px;
   flex: 1;
   min-width: 0;
 }
 
 .preset-name {
-  font-size: 0.8438rem;
+  font-size: var(--t-base);
+  font-weight: 600;
 }
 
 .preset-actions {
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .mini-curve {
@@ -764,11 +898,11 @@ body {
   border: 1px dashed var(--line2);
   border-radius: 12px;
   padding: 12px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
   display: flex;
   flex-direction: column;
   gap: 8px;
-  transition: 0.15s;
+  transition: border-color 0.15s, background-color 0.15s;
 }
 
 .import-panel.dragging {
@@ -786,9 +920,10 @@ body {
   background: rgba(11, 8, 16, 0.6);
   color: var(--ink);
   font-family: 'Cascadia Mono', Consolas, monospace;
-  font-size: 0.75rem;
+  font-size: var(--t-sm);
   line-height: 1.7;
   outline: none;
+  transition: border-color 0.15s;
 }
 
 .import-text:focus {
@@ -800,16 +935,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  padding: 10px 12px;
-  border: 1px solid var(--line);
+  padding: 12px;
+  border: 1px solid transparent;
   border-radius: 11px;
-  background: rgba(11, 8, 16, 0.45);
+  background: var(--well);
 }
 
 .fit-charts {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 16px;
   flex-wrap: wrap;
 }
 
@@ -822,8 +957,8 @@ body {
 .fit-metrics {
   display: flex;
   flex-direction: column;
-  gap: 3px;
-  font-size: 0.75rem;
+  gap: 4px;
+  font-size: var(--t-sm);
   color: var(--dim);
 }
 
@@ -836,16 +971,23 @@ body {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 4px 12px;
-  font-size: 0.6875rem;
+  font-size: var(--t-xs);
 }
 
 /* ---------- 目标曲线 ---------- */
 .target-row {
-  margin-bottom: 8px;
+  margin: 0 0 12px;
+}
+
+/* 工具带里的小标签，比普通说明更收敛 */
+.hint.label {
+  font-size: var(--t-xs);
+  letter-spacing: 0.06em;
+  color: var(--faint);
+  padding-right: 2px;
 }
 
 .diff-readout {
-  margin-left: auto;
   font-variant-numeric: tabular-nums;
 }
 
@@ -934,7 +1076,7 @@ button:focus:not(:focus-visible),
 }
 
 .gate strong {
-  font-size: 1.1875rem;
+  font-size: var(--t-xl);
   color: var(--glow);
 }
 
@@ -948,55 +1090,63 @@ button:focus:not(:focus-visible),
   grid-column: 1 / -1;
 }
 
+/* ponytail: 5 = COPY.filters.length；增删滤波档位要同步改这里，否则静默破版 */
 .filter-cards {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 8px;
-  margin: 8px 0 6px;
+  margin: 8px 0;
 }
 
 .filter-card {
-  flex: 0 1 8.6rem;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
-  padding: 8px 9px 9px;
-  border: 1px solid var(--line);
-  border-radius: 11px;
-  background: rgba(11, 8, 16, 0.5);
+  gap: 4px;
+  padding: 10px 12px 12px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: var(--well);
   color: var(--dim);
   font-family: inherit;
   text-align: left;
   cursor: pointer;
-  transition: 0.15s;
+  transition: background-color 0.15s, border-color 0.15s, box-shadow 0.15s;
 }
 
-.filter-card:hover {
+.filter-card:hover:not(:disabled) {
   border-color: var(--line2);
   background: rgba(161, 117, 240, 0.08);
 }
 
-.filter-card.on {
-  border-color: rgba(201, 166, 255, 0.6);
-  background: rgba(161, 117, 240, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(201, 166, 255, 0.25);
+.filter-card:active:not(:disabled) {
+  background: rgba(161, 117, 240, 0.26);
 }
 
+.filter-card.on {
+  border-color: rgba(201, 166, 255, 0.6);
+  background: rgba(161, 117, 240, 0.18);
+  box-shadow:
+    inset 0 0 0 1px rgba(201, 166, 255, 0.22),
+    0 0 0 3px rgba(161, 117, 240, 0.08);
+}
+
+/* 未连接时整档不可选，但仍要能读清「为什么不能选」，所以只压到 0.72 */
 .filter-card:disabled {
-  opacity: 0.55;
-  cursor: default;
+  opacity: 0.72;
+  cursor: not-allowed;
 }
 
 .filter-thumb {
   display: block;
+  width: 100%;
   margin-bottom: 4px;
   border-radius: 6px;
   background: rgba(11, 8, 16, 0.55);
 }
 
 .filter-name {
-  font-size: 0.7813rem;
+  font-size: var(--t-base);
   color: var(--ink);
 }
 
@@ -1005,17 +1155,130 @@ button:focus:not(:focus-visible),
 }
 
 .filter-fit {
-  font-size: 0.6875rem;
+  font-size: var(--t-sm);
   color: var(--dim);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .filter-cost {
-  font-size: 0.6563rem;
+  font-size: var(--t-xs);
   color: var(--faint);
-  line-height: 1.5;
+  line-height: 1.6;
 }
 
 .filter-note {
-  margin: 2px 0 0;
+  margin: 4px 0 0;
+}
+
+/* ---------- 页脚：把不足一屏的页面收口，而不是留一大片死黑 ---------- */
+.page-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid rgba(196, 164, 255, 0.07);
+  font-size: var(--t-xs);
+  color: var(--faint);
+}
+
+
+/* 工具带里的 chip 比正文按钮紧一档，保证「目标曲线 + 纵轴」在 1280 宽下同排 */
+.target-row .chip {
+  padding: 4px 8px;
+  font-size: var(--t-xs);
+}
+
+/* ---------- 视觉精修：主角区、导航反馈、按钮高度对齐 ---------- */
+
+/* 曲线区顶部加一层极淡紫光，让它从背景里"浮"起来；亮度低，不干扰读数 */
+.card.hero {
+  background:
+    radial-gradient(120% 90% at 50% -18%, rgba(161, 117, 240, 0.1), transparent 62%),
+    var(--panel-hero);
+}
+
+/* 左轨选中态加一条左侧指示条，比只换底色更容易定位 */
+.rail-item {
+  position: relative;
+}
+
+.rail-item.on::before {
+  content: '';
+  position: absolute;
+  left: -9px;
+  top: 50%;
+  width: 2px;
+  height: 18px;
+  margin-top: -9px;
+  border-radius: 2px;
+  background: var(--glow);
+  box-shadow: 0 0 8px rgba(201, 166, 255, 0.8);
+}
+
+/* chip 与 btn 混排时高度一致，避免一行里高低参差 */
+.chip,
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+}
+/* 操作提示比普通说明亮一档：这行是给用户看的操作指引，不是脚注 */
+.hint.ops {
+  color: var(--dim);
+  line-height: 1.95;
+}
+
+/* ---------- 顶栏 / 工具带的右侧选项组 ---------- */
+/* 原来靠一个 flex:1 的 .spacer 把右侧内容顶到边，窄屏换行时它先占满整行，
+   于是「撤销」独自留在第一行右端、其余按钮散到下一行。改成整组一起换行。 */
+.card-actions,
+.view-opts {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-left: auto;
+}
+
+/* 超宽屏收口：1600 是「5 张筛选卡仍 ≥270px、曲线区不至于被拉成 1800×320 扁条」的折中。
+   .main 是 .shell 的 grid 子项，max-width + margin-inline:auto 在栅格列内居中，左轨不受影响。 */
+@media (min-width: 1600px) {
+  .main {
+    width: 100%;
+    max-width: 1600px;
+    margin-inline: auto;
+  }
+}
+
+/* 窄屏：参数 2 列、滤波卡片 2 列 */
+@media (max-width: 900px) {
+  .params {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .param:not(.param-full) {
+    grid-column: span 1;
+  }
+
+  .filter-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  /* 窄屏下右侧选项组不再右顶，整组换行后从左边起排 */
+  .card-actions,
+  .view-opts {
+    margin-left: 0;
+  }
+}
+
+/* 表面分层：井底与卡片底只差 4 级明度（比值 1.04），近黑底上光靠色差看不出边界。
+   补一条极淡描边做边界，比提亮卡面安全——提亮会把选中筛选卡的说明文字压回 4.5 以下。 */
+.param,
+.model,
+.preset,
+.filter-card:not(.on) {
+  border-color: rgba(196, 164, 255, 0.19);
 }

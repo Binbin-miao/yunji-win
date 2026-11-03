@@ -31,6 +31,7 @@ export const COPY = {
   sectionModels: '支持的机型',
   sectionModelsHint: '旋润系列走厂商控制传输，浏览器通道暂不支持',
   sectionState: '设备设置',
+  foot: '网页版 · 设置只在本机浏览器与设备之间流转，不上传服务器',
   sectionStateHint: '拖动或点选后自动写入设备',
   supported: '浏览器可直连',
   unsupported: '请用桌面版',

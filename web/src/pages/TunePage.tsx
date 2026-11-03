@@ -85,53 +85,42 @@ export default function TunePage({
 
   return (
     <>
-      <section className="card">
+      <section className="card hero">
         <div className="card-head">
           <h2>参数均衡器</h2>
           <span className="hint">proEQ · 8 段峰值 · 48 kHz 显示域</span>
-          <div className="spacer" />
-          <button
-            className="chip"
-            onClick={onUndo}
-            disabled={!canUndo}
-            title={`${COPY.controls.undo.hint}（Ctrl+Z）`}
-          >
-            {COPY.controls.undo.label}
-          </button>
-          <button
-            className="chip"
-            onClick={onRedo}
-            disabled={!canRedo}
-            title={`${COPY.controls.redo.hint}（Ctrl+Shift+Z）`}
-          >
-            {COPY.controls.redo.label}
-          </button>
-          <button
-            className="chip"
-            onClick={() => setImporting(v => !v)}
-            title={COPY.controls.import.hint}
-          >
-            {importing ? '收起导入' : COPY.controls.import.label}
-          </button>
-          <button
-            className="btn"
-            onClick={() => setConfirming(true)}
-            disabled={eqStatus.kind === 'writing' || device.kind === 'simulator'}
-            title={device.kind === 'simulator' ? '模拟器不写入设备' : COPY.controls.writeEq.hint}
-          >
-            {eqStatus.kind === 'writing' ? COPY.controls.writeEqDone.label : COPY.controls.writeEq.label}
-          </button>
-          <div className="chips">
-            {DB_RANGES.map(r => (
-              <button
-                key={r}
-                className={`chip ${dbRange === r ? 'on' : ''}`}
-                aria-pressed={dbRange === r}
-                onClick={() => onDbRange(r)}
-              >
-                ±{r} dB
-              </button>
-            ))}
+          <div className="card-actions">
+            <button
+              className="chip"
+              onClick={onUndo}
+              disabled={!canUndo}
+              title={`${COPY.controls.undo.hint}（Ctrl+Z）`}
+            >
+              {COPY.controls.undo.label}
+            </button>
+            <button
+              className="chip"
+              onClick={onRedo}
+              disabled={!canRedo}
+              title={`${COPY.controls.redo.hint}（Ctrl+Shift+Z）`}
+            >
+              {COPY.controls.redo.label}
+            </button>
+            <button
+              className="chip"
+              onClick={() => setImporting(v => !v)}
+              title={COPY.controls.import.hint}
+            >
+              {importing ? '收起导入' : COPY.controls.import.label}
+            </button>
+            <button
+              className="btn"
+              onClick={() => setConfirming(true)}
+              disabled={eqStatus.kind === 'writing' || device.kind === 'simulator'}
+              title={device.kind === 'simulator' ? '模拟器不写入设备' : COPY.controls.writeEq.hint}
+            >
+              {eqStatus.kind === 'writing' ? COPY.controls.writeEqDone.label : COPY.controls.writeEq.label}
+            </button>
           </div>
         </div>
         {importing && <ImportPanel onApply={next => onBandsChange(next, false)} />}
@@ -159,7 +148,7 @@ export default function TunePage({
         )}
 
         <div className="row target-row">
-          <span className="hint">目标曲线</span>
+          <span className="hint label">目标曲线</span>
           <button
             className={`chip ${targetId === 'none' ? 'on' : ''}`}
             aria-pressed={targetId === 'none'}
@@ -186,6 +175,19 @@ export default function TunePage({
               {stats.rms.toFixed(1)} dB
             </span>
           )}
+          <div className="view-opts">
+              <span className="hint label">纵轴</span>
+              {DB_RANGES.map(r => (
+                <button
+                  key={r}
+                  className={`chip ${dbRange === r ? 'on' : ''}`}
+                  aria-pressed={dbRange === r}
+                  onClick={() => onDbRange(r)}
+                >
+                  ±{r} dB
+                </button>
+              ))}
+          </div>
         </div>
 
         <EqChart
@@ -273,10 +275,11 @@ export default function TunePage({
           <p className="hint">{COPY.reading}</p>
         ) : (
           <div className="params">
+            <span className="group-title">音量与声道</span>
             {(['volume', 'mic', 'balance'] as const).map(key => {
               const r = range(key)
               return (
-                <div className="param param-wide" key={key}>
+                <div className="param" key={key}>
                   <div className="param-top">
                     <span className="param-label">{COPY.param[key].label}</span>
                     <input
@@ -316,6 +319,7 @@ export default function TunePage({
               )
             })}
 
+            <span className="group-title">输出模式与设备状态</span>
             <div className="param param-full">
               <div className="param-top">
                 <span className="param-label">{COPY.param.filter.label}</span>

@@ -392,7 +392,12 @@ export default function App() {
               title={item.label}
               aria-label={item.label}
             >
-              {item.icon}
+              <span className="rail-icon" aria-hidden="true">
+                {item.icon}
+              </span>
+              <span className="rail-text" aria-hidden="true">
+                {item.label}
+              </span>
             </button>
           ))}
         </nav>
@@ -409,7 +414,7 @@ export default function App() {
             {statusText}
           </div>
           <div className="spacer" />
-          <span className="hint">{NAV.find(n => n.key === page)?.label}</span>
+          <span className="badge">{NAV.find(n => n.key === page)?.label}</span>
         </header>
 
         {device?.kind === 'simulator' && <div className="banner sim">{COPY.simBanner}</div>}
@@ -487,6 +492,12 @@ export default function App() {
           />
         )}
         {page === 'about' && <AboutPage device={device} state={state} failed={failed} />}
+
+        <footer className="page-foot">
+          <span>{COPY.foot}</span>
+          <div className="spacer" />
+          <span>{device ? `${device.name} · ${device.kind === 'simulator' ? '模拟器' : '真机'}` : '未连接设备'}</span>
+        </footer>
       </main>
     </div>
   )

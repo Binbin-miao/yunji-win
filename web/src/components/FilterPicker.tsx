@@ -19,17 +19,20 @@ const CURVE_BOTTOM = 40
 const DB_MIN = -44
 const DB_MAX = 2
 
-/** 一张卡片里的小画布：上面频响示意，右下角画脉冲振铃（前拖尾 vs 后拖尾） */
-function drawCard(canvas: HTMLCanvasElement, mode: number) {
+/**
+ * 一张卡片里的小画布：上面频响示意，左下角画脉冲振铃（单侧拖尾 vs 对称拖尾）。
+ * 宽度跟随卡片：卡片是均分整行的，画布固定 104px 会在宽卡里缩成一小块。
+ */
+function drawCard(canvas: HTMLCanvasElement, mode: number, cssW = W) {
   const dpr = window.devicePixelRatio || 1
-  canvas.width = Math.round(W * dpr)
+  canvas.width = Math.round(cssW * dpr)
   canvas.height = Math.round(H * dpr)
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
-  ctx.clearRect(0, 0, W, H)
+  ctx.clearRect(0, 0, cssW, H)
 
-  const x = (f: number) => PAD_L + (f / FILTER_MAX_HZ) * (W - PAD_L - PAD_R)
+  const x = (f: number) => PAD_L + (f / FILTER_MAX_HZ) * (cssW - PAD_L - PAD_R)
   const y = (db: number) => {
     const t = (db - DB_MIN) / (DB_MAX - DB_MIN)
     return CURVE_BOTTOM - t * (CURVE_BOTTOM - PAD_T)
@@ -40,7 +43,7 @@ function drawCard(canvas: HTMLCanvasElement, mode: number) {
   ctx.lineWidth = 1
   ctx.beginPath()
   ctx.moveTo(PAD_L, y(0))
-  ctx.lineTo(W - PAD_R, y(0))
+  ctx.lineTo(cssW - PAD_R, y(0))
   ctx.stroke()
 
   const { freqs, dbs } = filterResponse(mode)
@@ -115,7 +118,14 @@ export default function FilterPicker({ value, disabled, onChange }: Props) {
 function FilterThumb({ mode }: { mode: number }) {
   const ref = useRef<HTMLCanvasElement | null>(null)
   useEffect(() => {
-    if (ref.current) drawCard(ref.current, mode)
+    const el = ref.current
+    if (!el) return
+    // 宽度由 CSS 决定，画布按实际宽度重绘，避免位图被拉伸发虚
+    const draw = () => drawCard(el, mode, el.clientWidth || W)
+    draw()
+    const ro = new ResizeObserver(draw)
+    ro.observe(el)
+    return () => ro.disconnect()
   }, [mode])
-  return <canvas ref={ref} className="filter-thumb" style={{ width: W, height: H }} aria-hidden="true" />
+  return <canvas ref={ref} className="filter-thumb" style={{ height: H }} aria-hidden="true" />
 }
