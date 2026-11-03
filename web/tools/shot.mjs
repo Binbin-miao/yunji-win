@@ -10,8 +10,9 @@
  * 自带预览服务：端口没监听就自己起 `vite preview`，用完杀掉。
  */
 import { spawn } from 'node:child_process'
-import { existsSync, mkdirSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const WEB_DIR = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -31,7 +32,8 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i]
     if (a === '--out') opts.out = argv[++i]
-    else if (a === '--size') opts.size = argv[++i]
+    // 顺手兼容 1280,900 这种写法：写成逗号会让 window-size=NaN，Chrome 静默用默认视口
+    else if (a === '--size') opts.size = (argv[++i] || '').replace(',', 'x')
     else if (a === '--dpr') opts.dpr = argv[++i]
     else if (a === '--wait') opts.wait = Number(argv[++i])
     else if (a === '--ua') opts.ua = argv[++i]
@@ -99,6 +101,11 @@ function run(chrome, args) {
 const opts = parseArgs(process.argv.slice(2))
 const [w, h] = opts.size.split('x').map(Number)
 
+if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+  console.error(`--size 写法不对：${opts.size}，应为 1280x900`)
+  process.exit(1)
+}
+
 // Chromium 无头窗口有约 500px 的最小宽度：更窄的 --window-size 会被按 500 排版，
 // 再裁到请求的宽度，看起来像「右边被切掉」，其实是假象。窄屏请用真机验证。
 if (w < 500) {
@@ -117,15 +124,31 @@ if (opts.help) {
   process.exit(0)
 }
 
+/** 读 PNG 头里的真实宽高：用来校验截图尺寸有没有被 Chrome 悄悄换掉 */
+function pngSize(file) {
+  const buf = Buffer.alloc(24)
+  const fd = openSync(file, 'r')
+  try {
+    readSync(fd, buf, 0, 24, 0)
+  } finally {
+    closeSync(fd)
+  }
+  return [buf.readUInt32BE(16), buf.readUInt32BE(20)]
+}
+
 const chrome = findChrome()
 const server = await ensureServer()
 const url = BASE + (opts.query.startsWith('?') ? opts.query : opts.query ? `?${opts.query}` : '')
 const outPath = resolve(process.cwd(), opts.out)
 
+// 独立的 user-data-dir：否则 --screenshot 可能被转交给已开着的 Chrome 实例，
+// window-size 被忽略，输出会变成那个实例的视口尺寸（表现为「截图尺寸对不上」）。
+const profile = mkdtempSync(join(tmpdir(), 'yunji-shot-'))
 const common = [
   '--headless=new',
   '--disable-gpu',
   '--hide-scrollbars',
+  `--user-data-dir=${profile}`,
   `--window-size=${w},${h}`,
   `--force-device-scale-factor=${opts.dpr}`,
 ]
@@ -138,9 +161,22 @@ try {
     process.stdout.write(html)
   } else {
     mkdirSync(dirname(outPath), { recursive: true })
-    await run(chrome, [...common, `--virtual-time-budget=${opts.wait}`, `--screenshot=${outPath}`, url])
-    console.log(outPath)
+    const shoot = () =>
+      run(chrome, [...common, `--virtual-time-budget=${opts.wait}`, `--screenshot=${outPath}`, url])
+
+    await shoot()
+    // Chrome 偶发把 --screenshot 交给上一次还没退干净的实例，导致尺寸被换掉（表现为输出 764x485）。
+    // 校验一次，不符就重来，别让人拿着错图做判断。
+    let [gotW, gotH] = pngSize(outPath)
+    if (gotW !== w || gotH !== Math.round(h * Number(opts.dpr))) {
+      console.warn(`尺寸不符（拿到 ${gotW}x${gotH}，期望 ${w}x${Math.round(h * Number(opts.dpr))}），重试一次`)
+      await new Promise(r => setTimeout(r, 800))
+      await shoot()
+      ;[gotW, gotH] = pngSize(outPath)
+    }
+    console.log(`${outPath}  ${gotW}x${gotH}`)
   }
 } finally {
   if (server) server.kill()
+  rmSync(profile, { recursive: true, force: true })
 }
